@@ -1,8 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fastapi
-  namespace: chat
+  name: fastapi-deployment
 spec:
   replicas: 3
   selector:
@@ -18,13 +17,16 @@ spec:
         image: stradivirus/chatting:latest
         ports:
         - containerPort: 8000
-
+        env:
+        - name: REDIS_HOST
+          value: redis-service
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: kafka-service:9092
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: fastapi-service
-  namespace: chat
 spec:
   selector:
     app: fastapi
@@ -32,4 +34,3 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 8000
-  type: LoadBalancer

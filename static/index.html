@@ -1,15 +1,19 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>간단한 WebSocket 채팅</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>실시간 채팅</title>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <div id="chat"></div>
-    <input type="text" id="messageText" placeholder="메시지를 입력하세요">
-    <button id="sendButton" disabled>전송</button>
-    <script src="chat.js"></script>
+    <div class="chat-container">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input">
+            <input type="text" id="message-input" placeholder="메시지를 입력하세요...">
+            <button id="send-button">전송</button>
+        </div>
+    </div>
+    <script src="/static/chat.js"></script>
 </body>
 </html>

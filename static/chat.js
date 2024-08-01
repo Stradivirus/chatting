@@ -1,47 +1,36 @@
-const chatDiv = document.getElementById('chat');
-const messageInput = document.getElementById('messageText');
-const sendButton = document.getElementById('sendButton');
-let ws;
+const chatMessages = document.getElementById('chat-messages');
+const messageInput = document.getElementById('message-input');
+const sendButton = document.getElementById('send-button');
 
-function connectWebSocket() {
-    ws = new WebSocket('ws://' + window.location.host + '/fastapi-service/ws');
+const clientId = Date.now().toString();
+const ws = new WebSocket(`ws://${window.location.host}/ws/${clientId}`);
 
-    ws.onopen = function() {
-        console.log('WebSocket 연결 성공');
-        sendButton.disabled = false;
-    };
+ws.onmessage = function(event) {
+    const message = JSON.parse(event.data);
+    displayMessage(message);
+};
 
-    ws.onmessage = function(event) {
-        const message = document.createElement('div');
-        message.textContent = event.data;
-        chatDiv.appendChild(message);
-        chatDiv.scrollTop = chatDiv.scrollHeight;
-    };
+sendButton.onclick = function() {
+    sendMessage();
+};
 
-    ws.onclose = function() {
-        console.log('WebSocket 연결 끊김. 재연결 시도...');
-        sendButton.disabled = true;
-        setTimeout(connectWebSocket, 3000);
-    };
-
-    ws.onerror = function(error) {
-        console.error('WebSocket 오류:', error);
-    };
-}
+messageInput.onkeypress = function(e) {
+    if (e.key === 'Enter') {
+        sendMessage();
+    }
+};
 
 function sendMessage() {
-    if (messageInput.value && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(messageInput.value);
+    const message = messageInput.value;
+    if (message) {
+        ws.send(message);
         messageInput.value = '';
     }
 }
 
-sendButton.addEventListener('click', sendMessage);
-
-messageInput.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        sendMessage();
-    }
-});
-
-connectWebSocket();
+function displayMessage(message) {
+    const messageElement = document.createElement('div');
+    messageElement.textContent = `${message.client_id}: ${message.message}`;
+    chatMessages.appendChild(messageElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
