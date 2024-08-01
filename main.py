@@ -8,6 +8,7 @@ import secrets
 import logging
 from typing import List
 import os
+import json
 
 app = FastAPI()
 
@@ -63,10 +64,26 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            await manager.broadcast(f"Message received: {data}")
+            data = json.loads(data)
+            if data['type'] == 'join':
+                await manager.broadcast(json.dumps({
+                    'type': 'system',
+                    'nickname': 'System',
+                    'message': f"{data['nickname']}님이 입장하셨습니다."
+                }))
+            elif data['type'] == 'message':
+                await manager.broadcast(json.dumps({
+                    'type': 'message',
+                    'nickname': data['nickname'],
+                    'message': data['message']
+                }))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        await manager.broadcast(f"Client disconnected")
+        await manager.broadcast(json.dumps({
+            'type': 'system',
+            'nickname': 'System',
+            'message': f"클라이언트가 연결을 종료했습니다."
+        }))
 
 # 보안이 적용된 새로운 API 엔드포인트 예시
 @app.get("/secure-endpoint", dependencies=[Depends(get_api_key)])
