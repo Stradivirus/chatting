@@ -1,33 +1,19 @@
 let ws;
-let nickname = '';
-
-function showNicknameModal() {
-    document.getElementById('nickname-modal').style.display = 'block';
-}
-
-function setNickname(event) {
-    event.preventDefault();
-    nickname = document.getElementById('nickname-input').value.trim();
-    if (nickname) {
-        document.getElementById('nickname-modal').style.display = 'none';
-        connectWebSocket();
-    }
-}
 
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws_url = `${protocol}//${window.location.host}/ws`;
+    const host = window.location.host;
+    const ws_url = `${protocol}//${host}/fastapi-service/ws`;
     ws = new WebSocket(ws_url);
 
     ws.onopen = function() {
         console.log("WebSocket 연결됨");
-        ws.send(JSON.stringify({type: 'join', nickname: nickname}));
     };
 
     ws.onmessage = function(event) {
         const data = JSON.parse(event.data);
         const messages = document.getElementById('messages');
-        messages.innerHTML += `<p>${data.nickname}: ${data.message}</p>`;
+        messages.innerHTML += `<p>${data.message}</p>`;
         messages.scrollTop = messages.scrollHeight;
     };
 
@@ -45,12 +31,11 @@ function sendMessage(event) {
     event.preventDefault();
     const input = document.getElementById("messageText");
     if (input.value && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({type: 'message', nickname: nickname, message: input.value}));
+        ws.send(JSON.stringify({message: input.value}));
         input.value = '';
     }
 }
 
-document.getElementById('nickname-form').addEventListener('submit', setNickname);
 document.getElementById('chat-form').addEventListener('submit', sendMessage);
 
-showNicknameModal();
+connectWebSocket();
