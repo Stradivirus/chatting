@@ -6,7 +6,7 @@ from datetime import datetime
 import json
 import os
 import asyncio
-from redis_manager import RedisManager  # 이 줄을 수정했습니다
+from redis_manager import RedisManager
 
 app = FastAPI()
 
@@ -25,8 +25,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Redis 매니저 초기화
 redis_manager = RedisManager()
 
-# 활성 WebSocket 연결을 저장할 집합
-active_connections = set()
+# 활성 WebSocket 연결을 저장할 딕셔너리
+active_connections = {}
 
 @app.get("/")
 async def get():
@@ -36,19 +36,20 @@ async def get():
 
 async def redis_listener():
     await redis_manager.connect()
-    channel = await redis_manager.subscribe("chat")
+    pubsub = redis_manager.redis.pubsub()
+    await pubsub.subscribe("chat")
     try:
-        while True:
-            message = await channel[0].get()
-            if message:
-                await broadcast(json.loads(message))
+        async for message in pubsub.listen():
+            if message['type'] == 'message':
+                await broadcast(json.loads(message['data']))
     finally:
+        await pubsub.unsubscribe("chat")
         await redis_manager.close()
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
-    active_connections.add(websocket)
+    active_connections[client_id] = websocket
     try:
         while True:
             data = await websocket.receive_text()
@@ -61,13 +62,17 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             # Redis에 메시지 발행
             await redis_manager.publish("chat", json.dumps(message))
     except WebSocketDisconnect:
-        active_connections.remove(websocket)
+        del active_connections[client_id]
     finally:
-        active_connections.remove(websocket)
+        if client_id in active_connections:
+            del active_connections[client_id]
 
 async def broadcast(message: dict):
-    for connection in active_connections:
-        await connection.send_json(message)
+    for client_id, connection in active_connections.items():
+        try:
+            await connection.send_json(message)
+        except WebSocketDisconnect:
+            del active_connections[client_id]
 
 @app.on_event("startup")
 async def startup_event():
