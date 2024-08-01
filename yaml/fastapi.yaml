@@ -1,19 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fastapi-chat
+  name: fastapi
+  namespace: chat
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fastapi-chat
+      app: fastapi
   template:
     metadata:
       labels:
-        app: fastapi-chat
+        app: fastapi
     spec:
       containers:
-      - name: fastapi-chat
+      - name: fastapi
         image: stradivirus/chatting
         ports:
         - containerPort: 8000
@@ -22,10 +23,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: fastapi-chat-service
+  name: fastapi-service
+  namespace: chat
 spec:
   selector:
-    app: fastapi-chat
+    app: fastapi
   ports:
     - protocol: TCP
       port: 80
