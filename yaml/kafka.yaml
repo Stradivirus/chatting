@@ -26,11 +26,11 @@ spec:
         - name: KAFKA_CFG_PROCESS_ROLES
           value: "controller,broker"
         - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-          value: "0@kafka-0.kafka-headless:9093,1@kafka-1.kafka-headless:9093"
+          value: "0@kafka-0.kafka-service:9093,1@kafka-1.kafka-service:9093"
         - name: KAFKA_CFG_LISTENERS
           value: "PLAINTEXT://:9092,CONTROLLER://:9093"
         - name: KAFKA_CFG_ADVERTISED_LISTENERS
-          value: "PLAINTEXT://$(POD_NAME).kafka-headless:9092"
+          value: "PLAINTEXT://$(POD_NAME).kafka-service:9092"
         - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
           value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
         - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
