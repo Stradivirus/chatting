@@ -3,7 +3,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import redis
-from kafka import KafkaProducer
 from datetime import datetime
 import json
 import os
@@ -26,13 +25,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 redis_host = os.getenv("REDIS_HOST", "redis-service")
 redis_port = int(os.getenv("REDIS_PORT", 6379))
 redis_client = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
-
-# Kafka 프로듀서 설정
-kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-service:9092")
-kafka_producer = KafkaProducer(
-    bootstrap_servers=[kafka_bootstrap_servers],
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
-)
 
 # 활성 WebSocket 연결을 저장할 집합
 active_connections = set()
@@ -58,10 +50,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             
             # Redis에 메시지 발행
             redis_client.publish("chat", json.dumps(message))
-            
-            # Kafka에 메시지 전송
-            topic = f"chat-{datetime.now().strftime('%Y-%m-%d')}"
-            kafka_producer.send(topic, value=message)
             
             # 모든 연결된 클라이언트에게 메시지 브로드캐스트
             await broadcast(message)
