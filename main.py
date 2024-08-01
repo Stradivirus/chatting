@@ -7,6 +7,7 @@ from starlette.websockets import WebSocketDisconnect
 import secrets
 import logging
 from typing import List
+import os
 
 app = FastAPI()
 
@@ -24,7 +25,7 @@ app.add_middleware(
 )
 
 # API 키 보안 설정
-API_KEY = "your-secret-api-key"  # 실제 운영 환경에서는 환경 변수 등으로 관리해야 합니다
+API_KEY = os.environ.get("API_KEY", "your-secret-api-key")
 api_key_header = APIKeyHeader(name="X-API-Key")
 
 def get_api_key(api_key: str = Depends(api_key_header)):
@@ -36,11 +37,7 @@ def get_api_key(api_key: str = Depends(api_key_header)):
     return api_key
 
 # Static 파일을 서빙하기 위한 설정
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get("/")
-async def get():
-    return FileResponse("static/index.html")
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 # WebSocket 연결을 관리하기 위한 클래스
 class ConnectionManager:
