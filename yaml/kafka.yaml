@@ -19,12 +19,14 @@ spec:
         ports:
         - containerPort: 9092
         env:
+        - name: BITNAMI_DEBUG
+          value: "true"
         - name: KAFKA_CFG_NODE_ID
           valueFrom:
             fieldRef:
-              fieldPath: metadata.name
+              fieldPath: metadata.ordinal
         - name: KAFKA_CFG_PROCESS_ROLES
-          value: "controller,broker"
+          value: "broker,controller"
         - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
           value: "0@kafka-0.kafka-service:9093,1@kafka-1.kafka-service:9093"
         - name: KAFKA_CFG_LISTENERS
@@ -35,10 +37,16 @@ spec:
           value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
         - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
           value: "CONTROLLER"
+        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+          value: "PLAINTEXT"
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        - name: KAFKA_KRAFT_CLUSTER_ID
+          value: "abcdefghijklmnopqrstuv"
+        - name: ALLOW_PLAINTEXT_LISTENER
+          value: "yes"
 ---
 apiVersion: v1
 kind: Service
