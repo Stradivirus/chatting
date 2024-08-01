@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: kafka
+  namespace: chat
 spec:
   serviceName: "kafka"
   replicas: 2
@@ -13,18 +14,37 @@ spec:
       labels:
         app: kafka
     spec:
+      initContainers:
+      - name: init-node-id
+        image: busybox
+        command: ['/bin/sh', '-c']
+        args:
+          - |
+            NODE_NAME=$(echo $POD_NAME | sed 's/.*-//')
+            echo $NODE_NAME > /pod-data/node-id
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: pod-data
+          mountPath: /pod-data
       containers:
       - name: kafka
         image: bitnami/kafka:latest
         ports:
         - containerPort: 9092
+        - containerPort: 9093
         env:
         - name: BITNAMI_DEBUG
           value: "true"
         - name: KAFKA_CFG_NODE_ID
           valueFrom:
             fieldRef:
-              fieldPath: metadata.ordinal
+              fieldPath: metadata.name
+        - name: KAFKA_CFG_NODE_ID_COMMAND
+          value: "cat /pod-data/node-id"
         - name: KAFKA_CFG_PROCESS_ROLES
           value: "broker,controller"
         - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
@@ -47,14 +67,36 @@ spec:
           value: "abcdefghijklmnopqrstuv"
         - name: ALLOW_PLAINTEXT_LISTENER
           value: "yes"
+        - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+          value: "true"
+        volumeMounts:
+        - name: pod-data
+          mountPath: /pod-data
+        - name: kafka-data
+          mountPath: /bitnami/kafka
+      volumes:
+      - name: pod-data
+        emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: kafka-service
+  namespace: chat
 spec:
   clusterIP: None
   selector:
     app: kafka
   ports:
     - port: 9092
+      name: kafka
+    - port: 9093
+      name: controller
