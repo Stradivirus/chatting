@@ -1,9 +1,8 @@
 let ws;
 
 function connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const ws_url = `${protocol}//${host}/fastapi-service/ws`;
+    const host = window.location.host;  // 이는 LoadBalancer의 IP 또는 도메인이 될 것입니다.
+    const ws_url = `ws://${host}/ws`;
     ws = new WebSocket(ws_url);
 
     ws.onopen = function() {
