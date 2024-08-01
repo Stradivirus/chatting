@@ -15,7 +15,8 @@ function setNickname(event) {
 }
 
 function connectWebSocket() {
-    const ws_url = `ws://${window.location.host}/ws`;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws_url = `${protocol}//${window.location.host}/ws`;
     ws = new WebSocket(ws_url);
 
     ws.onopen = function() {
@@ -32,6 +33,11 @@ function connectWebSocket() {
 
     ws.onclose = function() {
         console.log("WebSocket 연결 끊김");
+        setTimeout(connectWebSocket, 5000);  // 5초 후 재연결 시도
+    };
+
+    ws.onerror = function(error) {
+        console.error("WebSocket 오류:", error);
     };
 }
 
