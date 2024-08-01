@@ -2,30 +2,17 @@
 <html>
     <head>
         <title>Chat</title>
+        <link rel="stylesheet" href="/static/styles.css">
     </head>
     <body>
-        <h1>WebSocket Chat</h1>
-        <form action="" onsubmit="sendMessage(event)">
-            <input type="text" id="messageText" autocomplete="off"/>
-            <button>Send</button>
-        </form>
-        <ul id='messages'>
-        </ul>
-        <script>
-            var ws = new WebSocket("ws://" + window.location.host + "/ws");
-            ws.onmessage = function(event) {
-                var messages = document.getElementById('messages')
-                var message = document.createElement('li')
-                var content = document.createTextNode(event.data)
-                message.appendChild(content)
-                messages.appendChild(message)
-            };
-            function sendMessage(event) {
-                var input = document.getElementById("messageText")
-                ws.send(input.value)
-                input.value = ''
-                event.preventDefault()
-            }
-        </script>
+        <div class="chat-container">
+            <h1>WebSocket Chat</h1>
+            <div id="messages"></div>
+            <form id="chat-form" onsubmit="sendMessage(event)">
+                <input type="text" id="messageText" autocomplete="off"/>
+                <button type="submit">Send</button>
+            </form>
+        </div>
+        <script src="/static/chat.js"></script>
     </body>
 </html>

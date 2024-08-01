@@ -4,7 +4,7 @@ metadata:
   name: fastapi
   namespace: chat
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: fastapi
@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: fastapi
-        image: stradivirus/chatting:0.1
+        image: stradivirus/chatting
         ports:
         - containerPort: 8000
 
