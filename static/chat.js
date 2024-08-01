@@ -1,5 +1,7 @@
 let ws;
 let nickname = '';
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
 
 function showNicknameModal() {
     document.getElementById('nickname-modal').style.display = 'block';
@@ -20,11 +22,13 @@ function setNickname(event) {
 
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    ws = new WebSocket(`${protocol}//${host}/ws`);
+    const host = window.location.hostname;
+    const port = 8000; // FastAPI 서버의 포트 번호
+    ws = new WebSocket(`${protocol}//${host}:${port}/ws`);
 
     ws.onopen = function() {
         console.log("WebSocket 연결이 열렸습니다.");
+        reconnectAttempts = 0;
         ws.send(JSON.stringify({type: 'join', nickname: nickname}));
     };
 
@@ -40,13 +44,18 @@ function connectWebSocket() {
 
     ws.onclose = function(event) {
         console.log("WebSocket 연결이 닫혔습니다.");
-        ws = null; // 연결이 닫히면 ws를 null로 설정
-        setTimeout(connectWebSocket, 1000); // 1초 후 재연결 시도
+        ws = null;
+        if (reconnectAttempts < maxReconnectAttempts) {
+            setTimeout(connectWebSocket, 1000 * Math.pow(2, reconnectAttempts));
+            reconnectAttempts++;
+        } else {
+            console.log("최대 재연결 시도 횟수를 초과했습니다.");
+        }
     };
 
     ws.onerror = function(error) {
         console.error("WebSocket 오류:", error);
-        ws = null; // 오류 발생 시 ws를 null로 설정
+        ws = null;
     };
 }
 
