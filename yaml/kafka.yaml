@@ -15,6 +15,12 @@ spec:
         app: kafka
     spec:
       initContainers:
+      - name: init-kafka
+        image: busybox
+        command: ['sh', '-c', 'mkdir -p /bitnami/kafka/config && chown -R 1001:1001 /bitnami/kafka']
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /bitnami/kafka
       - name: init-node-id
         image: busybox
         command: ['/bin/sh', '-c']
@@ -69,6 +75,8 @@ spec:
           value: "yes"
         - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
           value: "true"
+        - name: KAFKA_ENABLE_KRAFT
+          value: "yes"
         volumeMounts:
         - name: pod-data
           mountPath: /pod-data
