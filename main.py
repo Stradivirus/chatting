@@ -2,10 +2,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-import redis
 from datetime import datetime
 import json
 import os
+import asyncio
+from RedisManager import RedisManager
 
 app = FastAPI()
 
@@ -21,10 +22,8 @@ app.add_middleware(
 # Static 파일 서빙
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Redis 연결
-redis_host = os.getenv("REDIS_HOST", "redis-service")
-redis_port = int(os.getenv("REDIS_PORT", 6379))
-redis_client = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+# Redis 매니저 초기화
+redis_manager = RedisManager()
 
 # 활성 WebSocket 연결을 저장할 집합
 active_connections = set()
@@ -34,6 +33,17 @@ async def get():
     with open("static/index.html", "r") as file:
         content = file.read()
     return HTMLResponse(content)
+
+async def redis_listener():
+    await redis_manager.connect()
+    channel = await redis_manager.redis.subscribe("chat")
+    try:
+        while True:
+            message = await channel[0].get()
+            if message:
+                await broadcast(json.loads(message))
+    finally:
+        await redis_manager.close()
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -49,19 +59,19 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             }
             
             # Redis에 메시지 발행
-            redis_client.publish("chat", json.dumps(message))
-            
-            # 모든 연결된 클라이언트에게 메시지 브로드캐스트
-            await broadcast(message)
+            await redis_manager.publish("chat", json.dumps(message))
     except WebSocketDisconnect:
         active_connections.remove(websocket)
     finally:
-        # 연결이 종료되면 집합에서 제거
         active_connections.remove(websocket)
 
 async def broadcast(message: dict):
     for connection in active_connections:
         await connection.send_json(message)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(redis_listener())
 
 if __name__ == "__main__":
     import uvicorn

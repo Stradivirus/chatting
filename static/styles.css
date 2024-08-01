@@ -35,7 +35,8 @@ body {
 }
 
 .user-message {
-    background-color: #e1f5fe;
+    background-color: #007bff;
+    color: white;
     align-self: flex-end;
 }
 
