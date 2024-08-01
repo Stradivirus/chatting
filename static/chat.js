@@ -22,9 +22,12 @@ function setNickname(event) {
 
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    const port = 8000; // FastAPI 서버의 포트 번호
-    ws = new WebSocket(`${protocol}//${host}:${port}/ws`);
+    const host = '34.85.7.99';  // LoadBalancer의 External-IP
+    const port = 80; // 서비스가 노출된 포트
+    const ws_url = `${protocol}//${host}:${port}/ws`;
+    console.log("Attempting to connect to:", ws_url);
+    
+    ws = new WebSocket(ws_url);
 
     ws.onopen = function() {
         console.log("WebSocket 연결이 열렸습니다.");
@@ -43,9 +46,10 @@ function connectWebSocket() {
     };
 
     ws.onclose = function(event) {
-        console.log("WebSocket 연결이 닫혔습니다.");
+        console.log("WebSocket 연결이 닫혔습니다.", event);
         ws = null;
         if (reconnectAttempts < maxReconnectAttempts) {
+            console.log(`재연결 시도 ${reconnectAttempts + 1}/${maxReconnectAttempts}`);
             setTimeout(connectWebSocket, 1000 * Math.pow(2, reconnectAttempts));
             reconnectAttempts++;
         } else {

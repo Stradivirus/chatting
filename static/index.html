@@ -3,35 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Application</title>
+    <title>WebSocket 채팅</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <main class="main-content">
+        <div class="main-content">
             <h1>메인 콘텐츠</h1>
-            <p>여기에 다른 콘텐츠를 넣을 수 있습니다.</p>
-        </main>
-        <aside class="chat-container">
-            <h2>WebSocket Chat</h2>
+            <!-- 여기에 메인 콘텐츠를 추가하세요 -->
+        </div>
+        <div class="chat-container">
+            <h2>채팅</h2>
             <div id="messages"></div>
             <form id="chat-form">
-                <input type="text" id="messageText" autocomplete="off" placeholder="메시지를 입력하세요..."/>
+                <input type="text" id="messageText" placeholder="메시지를 입력하세요...">
                 <button type="submit">전송</button>
-            </form>
-        </aside>
-    </div>
-    
-    <div id="nickname-modal" class="modal">
-        <div class="modal-content">
-            <h2>닉네임을 입력하세요</h2>
-            <form id="nickname-form">
-                <input type="text" id="nickname-input" required>
-                <button type="submit">입장</button>
             </form>
         </div>
     </div>
-    
+
+    <div id="nickname-modal" class="modal">
+        <div class="modal-content">
+            <h2>닉네임 설정</h2>
+            <form id="nickname-form">
+                <input type="text" id="nickname-input" placeholder="닉네임을 입력하세요" required>
+                <button type="submit">확인</button>
+            </form>
+        </div>
+    </div>
+
     <script src="chat.js"></script>
 </body>
 </html>
