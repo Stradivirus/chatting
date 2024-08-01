@@ -6,7 +6,12 @@ let ws;
 const clientId = Date.now().toString();
 
 function connectWebSocket() {
-    ws = new WebSocket(`ws://${window.location.host}/ws/${clientId}`);
+    const wsUrl = `ws://fastapi-service:80/ws/${clientId}`;
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = function() {
+        console.log("WebSocket connection established");
+    };
 
     ws.onmessage = function(event) {
         const message = JSON.parse(event.data);
