@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: fastapi-chat
-        image: stradivirus/chat:latest
+        image: stradivirus/chatting
         ports:
         - containerPort: 8000
 
