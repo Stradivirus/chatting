@@ -4,6 +4,8 @@ kind: Kustomization
 # 리소스 파일 목록
 resources:
 - fastapi.yaml
+- redis.yaml
+- kafka.yaml
 
 # 이미지 업데이트 설정
 images:
