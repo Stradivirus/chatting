@@ -21,8 +21,6 @@ spec:
         env:
         - name: REDIS_HOST
           value: redis-service
-        - name: KAFKA_BOOTSTRAP_SERVERS
-          value: kafka-service:9092
 ---
 apiVersion: v1
 kind: Service
