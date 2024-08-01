@@ -2,11 +2,12 @@ const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
 
+const clientId = Date.now().toString();
 let ws;
 
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws/user`;
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/${clientId}`;
     ws = new WebSocket(wsUrl);
 
     ws.onopen = function() {
@@ -42,7 +43,6 @@ function sendMessage() {
     const message = messageInput.value;
     if (message && ws.readyState === WebSocket.OPEN) {
         ws.send(message);
-        displayMessage({ message: message, is_user: true });
         messageInput.value = '';
     } else if (ws.readyState !== WebSocket.OPEN) {
         console.log("WebSocket is not open. Message not sent.");
@@ -54,7 +54,7 @@ function displayMessage(message) {
     messageElement.textContent = message.message;
     messageElement.classList.add('message');
     
-    if (message.is_user) {
+    if (message.client_id === clientId) {
         messageElement.classList.add('user-message');
     }
     
