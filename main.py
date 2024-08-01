@@ -6,7 +6,7 @@ from datetime import datetime
 import json
 import os
 import asyncio
-from RedisManager import RedisManager
+from redis_manager import RedisManager  # 이 줄을 수정했습니다
 
 app = FastAPI()
 
@@ -36,7 +36,7 @@ async def get():
 
 async def redis_listener():
     await redis_manager.connect()
-    channel = await redis_manager.redis.subscribe("chat")
+    channel = await redis_manager.subscribe("chat")
     try:
         while True:
             message = await channel[0].get()
