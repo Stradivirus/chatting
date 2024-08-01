@@ -1,18 +1,26 @@
 <!DOCTYPE html>
-<html>
-    <head>
-        <title>Chat</title>
-        <link rel="stylesheet" href="/static/styles.css">
-    </head>
-    <body>
-        <div class="chat-container">
-            <h1>WebSocket Chat</h1>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Application</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <main class="main-content">
+            <h1>메인 콘텐츠</h1>
+            <p>여기에 다른 콘텐츠를 넣을 수 있습니다.</p>
+        </main>
+        <aside class="chat-container">
+            <h2>WebSocket Chat</h2>
             <div id="messages"></div>
             <form id="chat-form" onsubmit="sendMessage(event)">
-                <input type="text" id="messageText" autocomplete="off"/>
-                <button type="submit">Send</button>
+                <input type="text" id="messageText" autocomplete="off" placeholder="메시지를 입력하세요..."/>
+                <button type="submit">전송</button>
             </form>
-        </div>
-        <script src="/static/chat.js"></script>
-    </body>
+        </aside>
+    </div>
+    <script src="/static/chat.js"></script>
+</body>
 </html>
