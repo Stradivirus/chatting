@@ -40,21 +40,23 @@ function connectWebSocket() {
 
     ws.onclose = function(event) {
         console.log("WebSocket 연결이 닫혔습니다.");
+        ws = null; // 연결이 닫히면 ws를 null로 설정
         setTimeout(connectWebSocket, 1000); // 1초 후 재연결 시도
     };
 
     ws.onerror = function(error) {
         console.error("WebSocket 오류:", error);
+        ws = null; // 오류 발생 시 ws를 null로 설정
     };
 }
 
 function sendMessage(event) {
     event.preventDefault();
     var input = document.getElementById("messageText");
-    if (input.value && ws.readyState === WebSocket.OPEN) {
+    if (input.value && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({type: 'message', nickname: nickname, message: input.value}));
         input.value = '';
-    } else if (ws.readyState !== WebSocket.OPEN) {
+    } else if (!ws || ws.readyState !== WebSocket.OPEN) {
         console.log("WebSocket이 연결되어 있지 않습니다. 재연결을 시도합니다.");
         connectWebSocket();
     }
