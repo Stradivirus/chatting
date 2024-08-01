@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# 리소스 파일 목록
+resources:
+- fastapi.yaml
+
+# 이미지 업데이트 설정
+images:
+- name: stradivirus/chatting
+  newTag: latest
