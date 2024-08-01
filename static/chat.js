@@ -2,11 +2,12 @@ const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
 
-let ws;
 const clientId = Date.now().toString();
+let ws;
 
 function connectWebSocket() {
-    const wsUrl = `ws://fastapi-service:80/ws/${clientId}`;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/${clientId}`;
     ws = new WebSocket(wsUrl);
 
     ws.onopen = function() {
@@ -20,15 +21,13 @@ function connectWebSocket() {
 
     ws.onclose = function(event) {
         console.log("WebSocket is closed. Reconnecting...");
-        setTimeout(connectWebSocket, 1000);
+        setTimeout(connectWebSocket, 5000);  // 5초 후 재연결 시도
     };
 
     ws.onerror = function(error) {
         console.error("WebSocket error:", error);
     };
 }
-
-connectWebSocket();
 
 sendButton.onclick = function() {
     sendMessage();
@@ -56,3 +55,6 @@ function displayMessage(message) {
     chatMessages.appendChild(messageElement);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
+
+// 페이지 로드 시 WebSocket 연결
+connectWebSocket();
