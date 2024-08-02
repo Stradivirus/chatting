@@ -8,7 +8,7 @@ import asyncio
 from redis_manager import RedisManager
 
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(name)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
