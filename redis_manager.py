@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import time
 from redis.asyncio import Redis
 from redis.asyncio.connection import ConnectionPool
 from redis.exceptions import RedisError
@@ -77,3 +78,47 @@ class RedisManager:
     async def close(self):
         if self.pool:
             await self.pool.disconnect()
+
+    async def check_spam(self, client_id, message):
+        try:
+            # 1. 같은 채팅 5번 반복 체크
+            repeat_key = f"repeat:{client_id}"
+            last_message_key = f"last_message:{client_id}"
+            last_message = await self.redis.get(last_message_key)
+            
+            if last_message == message:
+                repeat_count = await self.redis.incr(repeat_key)
+                await self.redis.expire(repeat_key, 5)  # 5초 후 만료
+            else:
+                repeat_count = 1
+                await self.redis.set(repeat_key, repeat_count)
+                await self.redis.expire(repeat_key, 5)
+
+            if repeat_count >= 5:
+                await self.redis.setex(f"spam_block:{client_id}", 5, "repeat")
+                return False, "도배 방지: 같은 메시지를 반복하지 마세요."
+
+            # 2. 5초에 8번 이상 채팅 체크
+            freq_key = f"freq:{client_id}"
+            freq_count = await self.redis.incr(freq_key)
+            if freq_count == 1:
+                await self.redis.expire(freq_key, 5)  # 5초 후 만료
+
+            if freq_count > 8:
+                await self.redis.setex(f"spam_block:{client_id}", 10, "frequency")
+                return False, "도배 방지: 너무 빠른 속도로 채팅을 보내고 있습니다."
+
+            # 스팸이 아닌 경우, 이전 메시지 업데이트
+            await self.redis.set(last_message_key, message)
+
+            return True, None
+        except RedisError as e:
+            print(f"Error checking spam: {e}")
+            return True, None  # 에러 발생 시 기본적으로 허용
+
+    async def is_blocked(self, client_id):
+        try:
+            return await self.redis.get(f"spam_block:{client_id}") is not None
+        except RedisError as e:
+            print(f"Error checking block status: {e}")
+            return False

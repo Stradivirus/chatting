@@ -40,6 +40,23 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         while True:
             data = await websocket.receive_text()
             logger.debug(f"Received message from {client_id}: {data}")
+
+            # 스팸 체크
+            is_allowed, warning = await redis_manager.check_spam(client_id, data)
+            if not is_allowed:
+                await websocket.send_json({
+                    "type": "warning",
+                    "message": warning
+                })
+                continue
+
+            if await redis_manager.is_blocked(client_id):
+                await websocket.send_json({
+                    "type": "warning",
+                    "message": "도배 방지: 현재 채팅이 제한되었습니다."
+                })
+                continue
+
             message = {
                 "client_id": client_id,
                 "message": data,

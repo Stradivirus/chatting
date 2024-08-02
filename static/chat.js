@@ -23,7 +23,11 @@ function connectWebSocket() {
     ws.onmessage = function(event) {
         console.log("Received message:", event.data);
         const message = JSON.parse(event.data);
-        displayMessage(message);
+        if (message.type === 'warning') {
+            displayWarning(message.message);
+        } else {
+            displayMessage(message);
+        }
     };
 
     ws.onclose = function(event) {
@@ -86,6 +90,15 @@ function displayMessage(message) {
 
     chatMessages.appendChild(messageElement);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function displayWarning(warningMessage) {
+    messageInput.placeholder = warningMessage;
+    messageInput.style.color = 'red';
+    setTimeout(() => {
+        messageInput.placeholder = '';
+        messageInput.style.color = '';
+    }, 5000);  // 5초 후 경고 메시지 제거
 }
 
 // DOM이 완전히 로드된 후 실행
