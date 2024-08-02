@@ -4,7 +4,7 @@ metadata:
   name: redis
   namespace: chat
 spec:
-  serviceName: "redis"
+  serviceName: "redis-headless"
   replicas: 3
   selector:
     matchLabels:
@@ -23,7 +23,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis-service
+  name: redis-headless
   namespace: chat
 spec:
   selector:
@@ -33,3 +33,17 @@ spec:
       port: 6379
       targetPort: 6379
   clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: chat
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP
