@@ -64,12 +64,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 async def startup_event():
     try:
         await redis_manager.connect()
-        logger.info("Connected to Redis")
-        asyncio.create_task(broadcast_messages())
-        logger.info("Started message broadcasting task")
+        # 간단한 Redis 작업 수행
+        await redis_manager.redis.set("test_key", "test_value")
+        value = await redis_manager.redis.get("test_key")
+        logger.info(f"Redis test: {value}")
     except Exception as e:
-        logger.error(f"Failed to initialize application: {str(e)}")
-        # 여기서 애플리케이션 종료 또는 다른 오류 처리 로직을 추가할 수 있습니다.
+        logger.error(f"Redis connection test failed: {str(e)}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
