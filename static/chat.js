@@ -96,19 +96,16 @@ function canSendMessage(message) {
         return false;
     }
 
-    // 1. 메시지 전송 간격 제한 (0.5초)
     if (currentTime - lastMessageTime < 500) {
         displayWarning("메시지를 너무 빠르게 보내고 있습니다. 잠시 기다려주세요.");
         return false;
     }
 
-    // 2. 연속 동일 메시지 감지
     if (lastMessages.length >= 2 && lastMessages.every(msg => msg === message)) {
         banUser("동일한 메시지를 연속으로 보냈습니다.");
         return false;
     }
 
-    // 3. 메시지 길이 제한 (30자)
     if (message.length > 30) {
         displayWarning("메시지가 너무 깁니다. 30자 이내로 작성해주세요.");
         return false;
@@ -149,7 +146,7 @@ function banUser(reason) {
         if (banCountdown <= 0) {
             clearInterval(banTimer);
             isBanned = false;
-            displayWarning("채팅 금지가 해제되었습니다.");
+            removeWarning();
         } else {
             updateBanWarning();
         }
@@ -180,16 +177,19 @@ function displayMessage(message) {
 }
 
 function displayWarning(warningMessage) {
+    removeWarning(); // 기존 경고 메시지 제거
+    const warningElement = document.createElement('div');
+    warningElement.textContent = warningMessage;
+    warningElement.classList.add('warning-message');
+    chatMessages.appendChild(warningElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function removeWarning() {
     const existingWarning = document.querySelector('.warning-message');
     if (existingWarning) {
-        existingWarning.textContent = warningMessage;
-    } else {
-        const warningElement = document.createElement('div');
-        warningElement.textContent = warningMessage;
-        warningElement.classList.add('warning-message');
-        chatMessages.appendChild(warningElement);
+        existingWarning.remove();
     }
-    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 // DOM이 완전히 로드된 후 실행
