@@ -1,7 +1,6 @@
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
-const userCountDisplay = document.getElementById('user-count-display');
 
 const clientId = Date.now().toString();
 let ws;
@@ -22,11 +21,7 @@ function connectWebSocket() {
         console.log("Received message:", event.data);
         try {
             const message = JSON.parse(event.data);
-            if (message.type === "chat_message") {
-                displayMessage(message);
-            } else if (message.type === "user_count") {
-                updateUserCount(message.count);
-            }
+            displayMessage(message);
         } catch (error) {
             console.error("Error parsing message:", error);
         }
@@ -79,10 +74,6 @@ function displayMessage(message) {
     
     chatMessages.appendChild(messageElement);
     chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function updateUserCount(count) {
-    userCountDisplay.textContent = `현재 접속자 수: ${count}`;
 }
 
 document.addEventListener('DOMContentLoaded', function() {

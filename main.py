@@ -35,25 +35,16 @@ async def broadcast_messages():
         except Exception as e:
             logger.error(f"Error broadcasting message: {str(e)}")
 
-async def broadcast_user_count():
-    user_count = len(active_connections)
-    message = {"type": "user_count", "count": user_count}
-    for connection in active_connections:
-        await connection.send_json(message)
-    logger.debug(f"Broadcasted user count: {user_count}")
-
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
     active_connections.add(websocket)
     logger.info(f"New client connected: {client_id}")
-    await broadcast_user_count()
     try:
         while True:
             data = await websocket.receive_text()
             logger.debug(f"Received message from {client_id}: {data}")
             message = {
-                "type": "chat_message",
                 "client_id": client_id,
                 "message": data,
                 "timestamp": datetime.now().isoformat()
@@ -67,7 +58,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         logger.error(f"Error in websocket connection: {str(e)}")
     finally:
         active_connections.remove(websocket)
-        await broadcast_user_count()
 
 @app.on_event("startup")
 async def startup_event():
