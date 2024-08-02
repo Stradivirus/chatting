@@ -1,3 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: chat
+data:
+  redis.conf: |
+    cluster-enabled yes
+    cluster-node-timeout 5000
+    appendonly no
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -5,7 +16,7 @@ metadata:
   namespace: chat
 spec:
   serviceName: "redis"
-  replicas: 3
+  replicas: 6  # 3 masters + 3 replicas
   selector:
     matchLabels:
       app: redis
@@ -16,15 +27,27 @@ spec:
     spec:
       containers:
       - name: redis
-        image: redis:latest
+        image: redis:6.2
+        command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
         ports:
-        - containerPort: 6379
+        - name: client
+          containerPort: 6379
+        - name: gossip
+          containerPort: 16379
         resources:
           limits:
             memory: 1Gi
           requests:
             cpu: 100m
             memory: 128Mi
+        volumeMounts:
+        - name: config
+          mountPath: /usr/local/etc/redis
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: redis-config
 ---
 apiVersion: v1
 kind: Service
@@ -35,6 +58,12 @@ spec:
   selector:
     app: redis
   ports:
-    - protocol: TCP
+    - name: client
+      protocol: TCP
       port: 6379
       targetPort: 6379
+    - name: gossip
+      protocol: TCP
+      port: 16379
+      targetPort: 16379
+  clusterIP: None
