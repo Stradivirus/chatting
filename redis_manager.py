@@ -1,7 +1,7 @@
 import os
 import json
 import asyncio
-from redis.asyncio import RedisCluster, ClusterNode
+from redis.asyncio import RedisCluster
 
 class RedisManager:
     def __init__(self):
@@ -12,7 +12,7 @@ class RedisManager:
     async def connect(self):
         if not self.redis:
             try:
-                startup_nodes = [ClusterNode(host.split(':')[0], int(host.split(':')[1])) for host in self.redis_hosts]
+                startup_nodes = [{"host": host.split(':')[0], "port": int(host.split(':')[1])} for host in self.redis_hosts]
                 self.redis = RedisCluster(startup_nodes=startup_nodes, decode_responses=True)
                 await self.redis.initialize()
                 self.pubsub = self.redis.pubsub()
