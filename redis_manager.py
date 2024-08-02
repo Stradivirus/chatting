@@ -1,4 +1,4 @@
-import aioredis
+from redis.cluster import RedisCluster
 import os
 import json
 import asyncio
@@ -8,33 +8,37 @@ logger = logging.getLogger(__name__)
 
 class RedisManager:
     def __init__(self):
-        self.redis_service = os.getenv("REDIS_SERVICE", "redis-service")
-        self.redis_port = int(os.getenv("REDIS_PORT", 6379))
+        self.redis_nodes = [
+            {"host": "redis-0.redis-service.chat.svc.cluster.local", "port": 6379},
+            {"host": "redis-1.redis-service.chat.svc.cluster.local", "port": 6379},
+            {"host": "redis-2.redis-service.chat.svc.cluster.local", "port": 6379},
+            {"host": "redis-3.redis-service.chat.svc.cluster.local", "port": 6379},
+            {"host": "redis-4.redis-service.chat.svc.cluster.local", "port": 6379},
+            {"host": "redis-5.redis-service.chat.svc.cluster.local", "port": 6379},
+        ]
         self.redis = None
         self.pubsub = None
 
     async def connect(self, max_retries=5, retry_delay=5):
         for attempt in range(max_retries):
             try:
-                redis_host = f"{self.redis_service}.chat.svc.cluster.local"
-                redis_url = f"redis://{redis_host}:{self.redis_port}"
-                self.redis = await aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
-                await self.redis.ping()  # Test the connection
+                self.redis = RedisCluster(startup_nodes=self.redis_nodes, decode_responses=True)
+                # RedisCluster는 비동기 방식이 아니므로 ping을 동기 방식으로 호출합니다.
+                if self.redis.ping():
+                    logger.info(f"Successfully connected to Redis cluster")
                 self.pubsub = self.redis.pubsub()
-                logger.info(f"Successfully connected to Redis at {redis_url}")
                 return
-            except aioredis.RedisError as e:
-                logger.warning(f"Failed to connect to Redis at {redis_url}: {str(e)}")
+            except Exception as e:
+                logger.error(f"Failed to connect to Redis (attempt {attempt + 1}/{max_retries}): {str(e)}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
-                else:
-                    raise Exception(f"Failed to connect to Redis after {max_retries} attempts")
+        raise Exception("Failed to connect to Redis after multiple attempts")
 
     async def publish(self, channel, message):
         try:
             if not self.redis:
                 await self.connect()
-            await self.redis.publish(channel, message)
+            self.redis.publish(channel, message)
         except Exception as e:
             logger.error(f"Error publishing message: {str(e)}")
             raise
@@ -43,7 +47,7 @@ class RedisManager:
         try:
             if not self.pubsub:
                 await self.connect()
-            await self.pubsub.subscribe(channel)
+            self.pubsub.subscribe(channel)
         except Exception as e:
             logger.error(f"Error subscribing to channel: {str(e)}")
             raise
@@ -53,7 +57,7 @@ class RedisManager:
             raise Exception("Not subscribed to any channel")
         while True:
             try:
-                message = await self.pubsub.get_message(ignore_subscribe_messages=True)
+                message = self.pubsub.get_message(ignore_subscribe_messages=True)
                 if message is not None:
                     yield json.loads(message['data'])
             except Exception as e:
@@ -62,5 +66,5 @@ class RedisManager:
 
     async def close(self):
         if self.redis:
-            await self.redis.close()
+            self.redis.close()
             logger.info("Closed Redis connection")

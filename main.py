@@ -65,12 +65,12 @@ async def startup_event():
     try:
         await redis_manager.connect()
         # 간단한 Redis 작업 수행
-        await redis_manager.redis.set("test_key", "test_value")
-        value = await redis_manager.redis.get("test_key")
+        redis_manager.redis.set("test_key", "test_value")
+        value = redis_manager.redis.get("test_key")
         logger.info(f"Redis test: {value}")
     except Exception as e:
         logger.error(f"Redis connection test failed: {str(e)}")
-        
+
 @app.on_event("shutdown")
 async def shutdown_event():
     await redis_manager.close()
