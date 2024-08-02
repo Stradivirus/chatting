@@ -1,10 +1,11 @@
+
 import os
 import json
 import asyncio
 from redis.asyncio import Redis
 
 class RedisManager:
-    def __init__(self):
+    def init(self):
         self.redis_host = os.getenv("REDIS_HOST", "redis-cluster.chat.svc.cluster.local")
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.redis = None

@@ -7,7 +7,7 @@ let ws;
 
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws/${clientId}`;
+    const wsUrl = ${wsProtocol}//${window.location.host}/ws/${clientId};
     console.log("Connecting to WebSocket:", wsUrl);
     ws = new WebSocket(wsUrl);
 
@@ -59,13 +59,13 @@ function displayMessage(message) {
     const messageElement = document.createElement('div');
     messageElement.textContent = message.message;
     messageElement.classList.add('message');
-    
+
     if (message.client_id === clientId) {
         messageElement.classList.add('user-message');
     } else {
         messageElement.classList.add('other-message');
     }
-    
+
     chatMessages.appendChild(messageElement);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }

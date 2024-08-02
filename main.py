@@ -8,7 +8,7 @@ import asyncio
 from redis_manager import RedisManager
 
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -43,7 +43,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 "message": data,
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             await redis_manager.publish("chat", json.dumps(message))
             logger.debug(f"Published message to Redis: {message}")
     except WebSocketDisconnect:
@@ -64,6 +64,6 @@ async def shutdown_event():
     await redis_manager.close()
     logger.info("Closed Redis connection")
 
-if __name__ == "__main__":
+if name == "main":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
