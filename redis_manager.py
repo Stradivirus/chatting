@@ -5,15 +5,15 @@ import asyncio
 
 class RedisManager:
     def __init__(self):
-        self.redis_host = os.getenv("REDIS_HOST", "redis-service")
+        self.redis_hosts = os.getenv("REDIS_HOSTS", "redis-cluster-0.redis-cluster.chat.svc.cluster.local,redis-cluster-1.redis-cluster.chat.svc.cluster.local,redis-cluster-2.redis-cluster.chat.svc.cluster.local,redis-cluster-3.redis-cluster.chat.svc.cluster.local,redis-cluster-4.redis-cluster.chat.svc.cluster.local,redis-cluster-5.redis-cluster.chat.svc.cluster.local").split(',')
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.redis = None
         self.pubsub = None
 
     async def connect(self):
         if not self.redis:
-            redis_url = f"redis://{self.redis_host}:{self.redis_port}"
-            self.redis = await aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+            startup_nodes = [{"host": host, "port": self.redis_port} for host in self.redis_hosts]
+            self.redis = await aioredis.RedisCluster(startup_nodes=startup_nodes, decode_responses=True)
             self.pubsub = self.redis.pubsub()
 
     async def publish(self, channel, message):
