@@ -25,9 +25,15 @@ async def get():
 async def broadcast_messages():
     await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
-        for connection in active_connections.values():
-            await connection.send_json(message)
-            logger.debug(f"Broadcasted message to client: {message}")
+        try:
+            message_data = json.loads(message) if isinstance(message, str) else message
+            for connection in active_connections.values():
+                await connection.send_json(message_data)
+            logger.debug(f"Broadcasted message to clients: {message_data}")
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse message: {message}")
+        except Exception as e:
+            logger.error(f"Error broadcasting message: {str(e)}")
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -47,10 +53,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             await redis_manager.publish("chat", json.dumps(message))
             logger.debug(f"Published message to Redis: {message}")
     except WebSocketDisconnect:
-        del active_connections[client_id]
         logger.info(f"Client disconnected: {client_id}")
     except Exception as e:
         logger.error(f"Error in websocket connection: {str(e)}")
+    finally:
+        if client_id in active_connections:
+            del active_connections[client_id]
 
 @app.on_event("startup")
 async def startup_event():

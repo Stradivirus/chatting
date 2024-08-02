@@ -6,7 +6,6 @@ const clientIdDisplay = document.getElementById('client-id-display');
 const clientId = Date.now().toString();
 let ws;
 
-// 클라이언트 ID를 화면에 표시 (오류 처리 추가)
 function displayClientId() {
     if (clientIdDisplay) {
         clientIdDisplay.textContent = `Your Client ID: ${clientId}`;
@@ -29,8 +28,12 @@ function connectWebSocket() {
 
     ws.onmessage = function(event) {
         console.log("Received message:", event.data);
-        const message = JSON.parse(event.data);
-        displayMessage(message);
+        try {
+            const message = JSON.parse(event.data);
+            displayMessage(message);
+        } catch (error) {
+            console.error("Error parsing message:", error);
+        }
     };
 
     ws.onclose = function(event) {
@@ -66,6 +69,10 @@ function sendMessage() {
 
 function displayMessage(message) {
     console.log("Displaying message:", message);
+    if (!message || typeof message !== 'object' || !message.message) {
+        console.error("Invalid message format:", message);
+        return;
+    }
     const messageElement = document.createElement('div');
     messageElement.textContent = `${message.client_id === clientId ? 'You' : message.client_id}: ${message.message}`;
     messageElement.classList.add('message');
@@ -78,7 +85,6 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// DOM이 완전히 로드된 후 실행
 document.addEventListener('DOMContentLoaded', function() {
     displayClientId();
     connectWebSocket();
