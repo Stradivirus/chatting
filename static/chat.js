@@ -6,8 +6,14 @@ const clientIdDisplay = document.getElementById('client-id-display');
 const clientId = Date.now().toString();
 let ws;
 
-// 클라이언트 ID를 화면에 표시
-clientIdDisplay.textContent = `Your Client ID: ${clientId}`;
+// 클라이언트 ID를 화면에 표시 (오류 처리 추가)
+function displayClientId() {
+    if (clientIdDisplay) {
+        clientIdDisplay.textContent = `Your Client ID: ${clientId}`;
+    } else {
+        console.warn("Client ID display element not found");
+    }
+}
 
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -72,5 +78,8 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// 페이지 로드 시 WebSocket 연결
-connectWebSocket();
+// DOM이 완전히 로드된 후 실행
+document.addEventListener('DOMContentLoaded', function() {
+    displayClientId();
+    connectWebSocket();
+});
