@@ -20,9 +20,9 @@ class RedisManager:
                 if not self.redis:
                     for i in range(self.redis_replicas):
                         try:
-                            redis_host = f"{self.redis_service}-{i}.{self.redis_service}"
+                            redis_host = f"{self.redis_service}-{i}.{self.redis_service}.chat.svc.cluster.local"
                             redis_url = f"redis://{redis_host}:{self.redis_port}"
-                            self.redis = await aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+                            self.redis = await aioredis.create_redis_pool(redis_url, encoding="utf-8", decode_responses=True)
                             self.pubsub = self.redis.pubsub()
                             logger.info(f"Successfully connected to Redis at {redis_url}")
                             return
@@ -67,5 +67,6 @@ class RedisManager:
 
     async def close(self):
         if self.redis:
-            await self.redis.close()
+            self.redis.close()
+            await self.redis.wait_closed()
             logger.info("Closed Redis connection")
