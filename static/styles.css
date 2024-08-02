@@ -17,6 +17,12 @@ body {
     box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
 }
 
+#client-id-display {
+    padding: 10px;
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #ddd;
+}
+
 .chat-messages {
     flex-grow: 1;
     overflow-y: auto;
@@ -49,7 +55,7 @@ body {
 #message-input {
     flex-grow: 1;
     padding: 10px;
-    border: none;
+    border: 1px solid #ddd;
     border-radius: 5px 0 0 5px;
 }
 
