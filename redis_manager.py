@@ -5,7 +5,7 @@ from redis.asyncio import Redis
 
 class RedisManager:
     def __init__(self):
-        self.redis_host = os.getenv("REDIS_HOST", "redis-cluster-0.redis-cluster.chat.svc.cluster.local")
+        self.redis_host = os.getenv("REDIS_HOST", "redis-cluster.chat.svc.cluster.local")
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.redis = None
         self.pubsub = None
