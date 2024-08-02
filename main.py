@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from datetime import datetime
@@ -22,6 +22,10 @@ async def get():
         content = file.read()
     return HTMLResponse(content)
 
+@app.get("/chat_history")
+async def get_chat_history():
+    return await redis_manager.get_chat_history()
+
 async def broadcast_messages():
     await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
@@ -38,6 +42,15 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         while True:
             data = await websocket.receive_text()
             logger.debug(f"Received message from {client_id}: {data}")
+
+            if await redis_manager.is_user_blocked(client_id):
+                await websocket.send_json({"error": "You are temporarily blocked from sending messages."})
+                continue
+
+            if not await redis_manager.check_and_update_user_messages(client_id, data):
+                await websocket.send_json({"error": "You are sending messages too quickly. Please wait a few seconds."})
+                continue
+
             message = {
                 "client_id": client_id,
                 "message": data,
