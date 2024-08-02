@@ -4,7 +4,7 @@ metadata:
   name: fastapi-deployment
   namespace: chat
 spec:
-  replicas: 3
+  replicas: 5
   selector:
     matchLabels:
       app: fastapi
