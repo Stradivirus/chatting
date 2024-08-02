@@ -4,3 +4,4 @@ redis
 aioredis
 asyncio
 websockets
+motor

@@ -21,6 +21,11 @@ spec:
         env:
         - name: REDIS_HOST
           value: redis-service
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: mongodb_uri
 ---
 apiVersion: v1
 kind: Service

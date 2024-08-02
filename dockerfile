@@ -16,5 +16,8 @@ COPY . /code
 # static 디렉토리의 존재를 확인합니다.
 RUN ls -la /code/static
 
+# MongoDB URI를 환경 변수로 설정합니다.
+ENV MONGODB_URI=${MONGODB_URI}
+
 # uvicorn을 사용하여 FastAPI 애플리케이션을 실행합니다.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
