@@ -61,6 +61,8 @@ async def startup_event():
     await redis_manager.connect()
     logger.info("Connected to Redis")
 
+# 나머지 코드는 그대로 유지
+
 @app.on_event("shutdown")
 async def shutdown_event():
     await redis_manager.close()

@@ -9,7 +9,8 @@ class RedisManager:
 
     async def connect(self):
         if not self.redis:
-            self.redis = await aioredis.create_redis_pool(f"redis://{self.redis_host}:{self.redis_port}")
+            redis_url = f"redis://{self.redis_host}:{self.redis_port}"
+            self.redis = await aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
 
     async def publish(self, channel, message):
         if not self.redis:
@@ -19,9 +20,10 @@ class RedisManager:
     async def subscribe(self, channel):
         if not self.redis:
             await self.connect()
-        return await self.redis.subscribe(channel)
+        pubsub = self.redis.pubsub()
+        await pubsub.subscribe(channel)
+        return pubsub
 
     async def close(self):
         if self.redis:
-            self.redis.close()
-            await self.redis.wait_closed()
+            await self.redis.close()
