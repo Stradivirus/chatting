@@ -20,7 +20,7 @@ spec:
         - containerPort: 8000
         env:
         - name: REDIS_HOST
-          value: "REDIS_HOST", "redis-cluster-0.redis-cluster.chat.svc.cluster.local"
+          value: "redis-cluster-0.redis-cluster.chat.svc.cluster.local"
         - name: REDIS_PORT
           value: "6379"
 ---
