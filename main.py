@@ -1,7 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import logging
 import asyncio
@@ -16,6 +16,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 redis_manager = RedisManager()
 active_connections = {}
+
+# 도배 방지를 위한 변수들
+message_history = {}
+banned_users = set()
 
 @app.get("/")
 async def get():
@@ -32,6 +36,36 @@ async def broadcast_messages():
         )
         logger.debug(f"Broadcasted message to all clients: {message}")
 
+async def check_spam(client_id: str, message: str) -> bool:
+    current_time = datetime.now()
+    
+    if client_id not in message_history:
+        message_history[client_id] = []
+    
+    # 1. 메시지 전송 간격 제한 (0.5초)
+    if message_history[client_id] and (current_time - message_history[client_id][-1]['time']).total_seconds() < 0.5:
+        return True
+    
+    # 2. 연속 동일 메시지 감지
+    if len(message_history[client_id]) >= 2 and all(m['content'] == message for m in message_history[client_id][-2:]):
+        return True
+    
+    # 3. 메시지 길이 제한 (30자)
+    if len(message) > 30:
+        return True
+    
+    # 6. 메시지 전송 속도 제한
+    five_seconds_ago = current_time - timedelta(seconds=5)
+    recent_messages = [m for m in message_history[client_id] if m['time'] > five_seconds_ago]
+    if len(recent_messages) >= 8:
+        return True
+    
+    message_history[client_id].append({'content': message, 'time': current_time})
+    if len(message_history[client_id]) > 10:  # 최근 10개 메시지만 유지
+        message_history[client_id] = message_history[client_id][-10:]
+    
+    return False
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
@@ -41,6 +75,26 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         while True:
             data = await websocket.receive_text()
             logger.debug(f"Received message from {client_id}: {data}")
+            
+            if client_id in banned_users:
+                warning = {
+                    "type": "warning",
+                    "message": "You are currently banned from sending messages."
+                }
+                await websocket.send_text(json.dumps(warning))
+                continue
+            
+            if await check_spam(client_id, data):
+                banned_users.add(client_id)
+                warning = {
+                    "type": "warning",
+                    "message": "You have been banned for 30 seconds due to spamming."
+                }
+                await websocket.send_text(json.dumps(warning))
+                await asyncio.sleep(30)  # 30초 후 차단 해제
+                banned_users.remove(client_id)
+                continue
+            
             message = {
                 "client_id": client_id,
                 "message": data,
@@ -56,6 +110,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     finally:
         if client_id in active_connections:
             del active_connections[client_id]
+        if client_id in message_history:
+            del message_history[client_id]
         logger.info(f"Connection closed for client: {client_id}")
 
 @app.on_event("startup")
