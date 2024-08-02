@@ -52,7 +52,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     active_connections[client_id] = websocket
     try:
         while True:
-            data = await websocket.receive_text()
+            # 수정: 60초 타임아웃 추가
+            data = await asyncio.wait_for(websocket.receive_text(), timeout=60)
             message = {
                 "client_id": client_id,
                 "message": data,
@@ -61,6 +62,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             
             # Redis에 메시지 발행
             await redis_manager.publish("chat", json.dumps(message))
+    # 수정: 타임아웃 예외 처리 추가
+    except asyncio.TimeoutError:
+        # 타임아웃 발생 시 ping 메시지 전송
+        await websocket.send_text("ping")
     except WebSocketDisconnect:
         del active_connections[client_id]
     finally:
@@ -77,6 +82,17 @@ async def broadcast(message: dict):
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(redis_listener())
+
+# 수정: Ping 처리를 위한 새로운 엔드포인트 추가
+@app.websocket("/ping")
+async def ping(websocket: WebSocket):
+    await websocket.accept()
+    while True:
+        try:
+            await websocket.receive_text()
+            await websocket.send_text("pong")
+        except WebSocketDisconnect:
+            break
 
 if __name__ == "__main__":
     import uvicorn

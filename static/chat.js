@@ -4,6 +4,7 @@ const sendButton = document.getElementById('send-button');
 
 const clientId = Date.now().toString();
 let ws;
+let pingWs; // 수정: ping용 WebSocket 추가
 let isConnecting = false;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
@@ -21,11 +22,17 @@ function connectWebSocket() {
         isConnecting = false;
         reconnectAttempts = 0;
         updateUIConnectionStatus(true);
+        startPingInterval(); // 수정: ping 간격 시작
     };
 
     ws.onmessage = function(event) {
-        const message = JSON.parse(event.data);
-        displayMessage(message);
+        // 수정: ping 메시지 처리 추가
+        if (event.data === "ping") {
+            ws.send("pong");
+        } else {
+            const message = JSON.parse(event.data);
+            displayMessage(message);
+        }
     };
 
     ws.onclose = function(event) {
@@ -46,8 +53,31 @@ function connectWebSocket() {
     };
 }
 
+// 수정: ping 간격 함수 추가
+function startPingInterval() {
+    const pingWsUrl = `${wsProtocol}//${window.location.host}/ping`;
+    pingWs = new WebSocket(pingWsUrl);
+
+    pingWs.onopen = function() {
+        setInterval(() => {
+            if (pingWs.readyState === WebSocket.OPEN) {
+                pingWs.send("ping");
+            }
+        }, 30000);  // 30초마다 ping 전송
+    };
+
+    pingWs.onmessage = function(event) {
+        if (event.data === "pong") {
+            console.log("Received pong from server");
+        }
+    };
+
+    pingWs.onclose = function() {
+        setTimeout(startPingInterval, 5000);  // 5초 후 재연결 시도
+    };
+}
+
 function updateUIConnectionStatus(isConnected) {
-    // 연결 상태에 따라 UI 업데이트 (선택적)
     sendButton.disabled = !isConnected;
     messageInput.disabled = !isConnected;
     if (isConnected) {
