@@ -5,6 +5,7 @@ kind: Kustomization
 resources:
 - fastapi.yaml
 - redis.yaml
+- ingress.yaml
 
 # 이미지 업데이트 설정
 images:
