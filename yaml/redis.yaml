@@ -1,10 +1,11 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: redis
   namespace: chat
 spec:
-  replicas: 1
+  serviceName: "redis"
+  replicas: 3
   selector:
     matchLabels:
       app: redis
@@ -18,6 +19,12 @@ spec:
         image: redis:latest
         ports:
         - containerPort: 6379
+        resources:
+          limits:
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 128Mi
 ---
 apiVersion: v1
 kind: Service
@@ -31,4 +38,4 @@ spec:
     - protocol: TCP
       port: 6379
       targetPort: 6379
----
+  clusterIP: None
