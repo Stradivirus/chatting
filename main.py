@@ -7,7 +7,8 @@ import logging
 import asyncio
 from redis_manager import RedisManager
 
-logging.basicConfig(level=logging.DEBUG)
+# 로깅 설정
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
@@ -70,7 +71,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     except WebSocketDisconnect:
         logger.info(f"Client disconnected: {client_id}")
     except Exception as e:
-        logger.error(f"Error in websocket connection: {str(e)}")
+        logger.error(f"Error in websocket connection: {str(e)}", exc_info=True)
     finally:
         if client_id in active_connections:
             del active_connections[client_id]
@@ -84,7 +85,7 @@ async def startup_event():
         asyncio.create_task(broadcast_messages())
         logger.info("Started message broadcasting task")
     except Exception as e:
-        logger.error(f"Failed to start up properly: {e}")
+        logger.error(f"Failed to start up properly: {e}", exc_info=True)
         raise
 
 @app.on_event("shutdown")

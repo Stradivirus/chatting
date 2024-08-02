@@ -2,9 +2,12 @@ import os
 import json
 import asyncio
 import time
+import logging
 from redis.asyncio import Redis
 from redis.asyncio.connection import ConnectionPool
 from redis.exceptions import RedisError
+
+logger = logging.getLogger(__name__)
 
 class RedisManager:
     def __init__(self):
@@ -12,6 +15,7 @@ class RedisManager:
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.pool = None
         self.pubsub = None
+        self.redis = None
 
     async def connect(self):
         if not self.pool:
@@ -25,9 +29,9 @@ class RedisManager:
                 self.redis = Redis(connection_pool=self.pool)
                 await self.redis.ping()
                 self.pubsub = self.redis.pubsub()
-                print(f"Connected to Redis at {self.redis_host}:{self.redis_port}")
+                logger.info(f"Connected to Redis at {self.redis_host}:{self.redis_port}")
             except RedisError as e:
-                print(f"Failed to connect to Redis: {e}")
+                logger.error(f"Failed to connect to Redis: {e}", exc_info=True)
                 await self.reconnect()
 
     async def reconnect(self, max_retries=3):
@@ -37,16 +41,16 @@ class RedisManager:
                 await self.connect()
                 return
             except RedisError as e:
-                print(f"Reconnection attempt {attempt + 1} failed: {e}")
+                logger.error(f"Reconnection attempt {attempt + 1} failed: {e}", exc_info=True)
         raise Exception("Failed to reconnect to Redis after multiple attempts")
 
     async def publish(self, channel, message):
         try:
-            if not self.pool:
+            if not self.redis:
                 await self.connect()
             return await self.redis.publish(channel, message)
         except RedisError as e:
-            print(f"Error publishing message: {e}")
+            logger.error(f"Error publishing message: {e}", exc_info=True)
             await self.reconnect()
             return await self.redis.publish(channel, message)
 
@@ -56,7 +60,7 @@ class RedisManager:
                 await self.connect()
             await self.pubsub.subscribe(channel)
         except RedisError as e:
-            print(f"Error subscribing to channel: {e}")
+            logger.error(f"Error subscribing to channel: {e}", exc_info=True)
             await self.reconnect()
             await self.pubsub.subscribe(channel)
 
@@ -69,15 +73,16 @@ class RedisManager:
                 if message is not None:
                     yield json.loads(message['data'])
             except RedisError as e:
-                print(f"Error while listening: {e}")
+                logger.error(f"Error while listening: {e}", exc_info=True)
                 await self.reconnect()
             except Exception as e:
-                print(f"Unexpected error while listening: {e}")
+                logger.error(f"Unexpected error while listening: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
     async def close(self):
         if self.pool:
             await self.pool.disconnect()
+        logger.info("Closed Redis connection")
 
     async def check_spam(self, client_id, message):
         try:
@@ -117,7 +122,7 @@ class RedisManager:
 
             return True, None
         except RedisError as e:
-            logger.error(f"Error checking spam: {e}")
+            logger.error(f"Error checking spam: {e}", exc_info=True)
             return True, None  # 에러 발생 시 기본적으로 허용
 
     async def is_blocked(self, client_id):
@@ -126,5 +131,5 @@ class RedisManager:
             logger.debug(f"Block status for {client_id}: {'Blocked' if blocked else 'Not blocked'}")
             return blocked is not None
         except RedisError as e:
-            logger.error(f"Error checking block status: {e}")
+            logger.error(f"Error checking block status: {e}", exc_info=True)
             return False
