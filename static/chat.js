@@ -13,6 +13,7 @@ let messageCount = 0;
 let lastMessages = [];
 let isBanned = false;
 let banTimer = null;
+let banCountdown = 0;
 let messageCountTimer = null;
 
 function connectWebSocket() {
@@ -90,6 +91,11 @@ function sendMessage() {
 function canSendMessage(message) {
     const currentTime = Date.now();
 
+    if (isBanned) {
+        displayWarning(`채팅이 금지되었습니다. ${banCountdown}초 후에 다시 시도해주세요.`);
+        return false;
+    }
+
     // 1. 메시지 전송 간격 제한 (0.5초)
     if (currentTime - lastMessageTime < 500) {
         displayWarning("메시지를 너무 빠르게 보내고 있습니다. 잠시 기다려주세요.");
@@ -98,19 +104,13 @@ function canSendMessage(message) {
 
     // 2. 연속 동일 메시지 감지
     if (lastMessages.length >= 2 && lastMessages.every(msg => msg === message)) {
-        banUser("동일한 메시지를 연속으로 보냈습니다. 30초 동안 채팅이 금지됩니다.");
+        banUser("동일한 메시지를 연속으로 보냈습니다.");
         return false;
     }
 
     // 3. 메시지 길이 제한 (30자)
     if (message.length > 30) {
         displayWarning("메시지가 너무 깁니다. 30자 이내로 작성해주세요.");
-        return false;
-    }
-
-    // 6. 메시지 전송 속도 제한
-    if (isBanned) {
-        displayWarning("현재 채팅이 금지된 상태입니다.");
         return false;
     }
 
@@ -126,24 +126,41 @@ function canSendMessage(message) {
 function updateMessageCount() {
     messageCount++;
     if (messageCount === 1) {
+        if (messageCountTimer) {
+            clearTimeout(messageCountTimer);
+        }
         messageCountTimer = setTimeout(() => {
             messageCount = 0;
         }, 5000);
     } else if (messageCount >= 8) {
-        banUser("메시지를 너무 많이 보냈습니다. 30초 동안 채팅이 금지됩니다.");
+        banUser("메시지를 너무 많이 보냈습니다.");
     }
 }
 
 function banUser(reason) {
     isBanned = true;
-    displayWarning(reason);
+    banCountdown = 30;
+    displayWarning(`${reason} ${banCountdown}초 동안 채팅이 금지됩니다.`);
     if (banTimer) {
-        clearTimeout(banTimer);
+        clearInterval(banTimer);
     }
-    banTimer = setTimeout(() => {
-        isBanned = false;
-        displayWarning("채팅 금지가 해제되었습니다.");
-    }, 30000);
+    banTimer = setInterval(() => {
+        banCountdown--;
+        if (banCountdown <= 0) {
+            clearInterval(banTimer);
+            isBanned = false;
+            displayWarning("채팅 금지가 해제되었습니다.");
+        } else {
+            updateBanWarning();
+        }
+    }, 1000);
+}
+
+function updateBanWarning() {
+    const warningElement = document.querySelector('.warning-message');
+    if (warningElement) {
+        warningElement.textContent = `채팅이 금지되었습니다. ${banCountdown}초 후에 다시 시도해주세요.`;
+    }
 }
 
 function displayMessage(message) {
@@ -163,10 +180,15 @@ function displayMessage(message) {
 }
 
 function displayWarning(warningMessage) {
-    const warningElement = document.createElement('div');
-    warningElement.textContent = warningMessage;
-    warningElement.classList.add('warning-message');
-    chatMessages.appendChild(warningElement);
+    const existingWarning = document.querySelector('.warning-message');
+    if (existingWarning) {
+        existingWarning.textContent = warningMessage;
+    } else {
+        const warningElement = document.createElement('div');
+        warningElement.textContent = warningMessage;
+        warningElement.classList.add('warning-message');
+        chatMessages.appendChild(warningElement);
+    }
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
