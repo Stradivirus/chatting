@@ -1,18 +1,10 @@
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
-const clientIdDisplay = document.getElementById('client-id-display');
+const userCountDisplay = document.getElementById('user-count-display');
 
 const clientId = Date.now().toString();
 let ws;
-
-function displayClientId() {
-    if (clientIdDisplay) {
-        clientIdDisplay.textContent = `Your Client ID: ${clientId}`;
-    } else {
-        console.warn("Client ID display element not found");
-    }
-}
 
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -30,7 +22,11 @@ function connectWebSocket() {
         console.log("Received message:", event.data);
         try {
             const message = JSON.parse(event.data);
-            displayMessage(message);
+            if (message.type === "chat_message") {
+                displayMessage(message);
+            } else if (message.type === "user_count") {
+                updateUserCount(message.count);
+            }
         } catch (error) {
             console.error("Error parsing message:", error);
         }
@@ -74,7 +70,7 @@ function displayMessage(message) {
         return;
     }
     const messageElement = document.createElement('div');
-    messageElement.textContent = `${message.client_id === clientId ? 'You' : message.client_id}: ${message.message}`;
+    messageElement.textContent = `${message.client_id === clientId ? 'You' : 'Other'}: ${message.message}`;
     messageElement.classList.add('message');
     
     if (message.client_id === clientId) {
@@ -85,7 +81,10 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+function updateUserCount(count) {
+    userCountDisplay.textContent = `현재 접속자 수: ${count}`;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    displayClientId();
     connectWebSocket();
 });
