@@ -1,7 +1,7 @@
-import aioredis
 import os
 import json
 import asyncio
+from aioredis import RedisCluster
 
 class RedisManager:
     def __init__(self):
@@ -12,7 +12,8 @@ class RedisManager:
     async def connect(self):
         if not self.redis:
             try:
-                self.redis = await aioredis.RedisCluster.from_url(f"redis://{self.redis_hosts[0]}", startup_nodes=self.redis_hosts)
+                startup_nodes = [{"host": host.split(':')[0], "port": int(host.split(':')[1])} for host in self.redis_hosts]
+                self.redis = await RedisCluster.from_url(f"redis://{self.redis_hosts[0]}", startup_nodes=startup_nodes)
                 self.pubsub = self.redis.pubsub()
             except Exception as e:
                 print(f"Failed to connect to Redis: {e}")
