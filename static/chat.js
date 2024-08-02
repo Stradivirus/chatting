@@ -4,10 +4,12 @@ const sendButton = document.getElementById('send-button');
 
 const clientId = Date.now().toString();
 let ws;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
 
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = ${wsProtocol}//${window.location.host}/ws/${clientId};
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/${clientId}`;
     console.log("Connecting to WebSocket:", wsUrl);
     ws = new WebSocket(wsUrl);
 
@@ -15,6 +17,7 @@ function connectWebSocket() {
         console.log("WebSocket connection established");
         sendButton.disabled = false;
         messageInput.disabled = false;
+        reconnectAttempts = 0;
     };
 
     ws.onmessage = function(event) {
@@ -27,12 +30,27 @@ function connectWebSocket() {
         console.log("WebSocket is closed. Attempting to reconnect...");
         sendButton.disabled = true;
         messageInput.disabled = true;
-        setTimeout(connectWebSocket, 5000);
+        reconnectWithBackoff();
     };
 
     ws.onerror = function(error) {
         console.error("WebSocket error:", error);
     };
+}
+
+function reconnectWithBackoff() {
+    if (reconnectAttempts >= maxReconnectAttempts) {
+        console.log("Max reconnection attempts reached. Please refresh the page.");
+        return;
+    }
+    
+    const backoffTime = Math.pow(2, reconnectAttempts) * 1000;
+    console.log(`Attempting to reconnect in ${backoffTime / 1000} seconds...`);
+    
+    setTimeout(() => {
+        reconnectAttempts++;
+        connectWebSocket();
+    }, backoffTime);
 }
 
 sendButton.onclick = sendMessage;

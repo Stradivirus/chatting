@@ -6,7 +6,6 @@ import json
 import logging
 import asyncio
 from redis_manager import RedisManager
-import uuid
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ async def broadcast_messages():
     await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
         await asyncio.gather(
-            *[connection.send_json(message) for connection in active_connections.values()],
+            *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
             return_exceptions=True
         )
         logger.debug(f"Broadcasted message to all clients: {message}")
@@ -56,6 +55,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     finally:
         if client_id in active_connections:
             del active_connections[client_id]
+        logger.info(f"Connection closed for client: {client_id}")
 
 @app.on_event("startup")
 async def startup_event():
@@ -66,7 +66,7 @@ async def startup_event():
         logger.info("Started message broadcasting task")
     except Exception as e:
         logger.error(f"Failed to start up properly: {e}")
-        # You might want to exit the application here if Redis connection fails
+        raise
 
 @app.on_event("shutdown")
 async def shutdown_event():
