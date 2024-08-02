@@ -1,36 +1,63 @@
-
 import os
 import json
 import asyncio
 from redis.asyncio import Redis
+from redis.asyncio.connection import ConnectionPool
+from redis.exceptions import RedisError
 
 class RedisManager:
-    def init(self):
+    def __init__(self):
         self.redis_host = os.getenv("REDIS_HOST", "redis-cluster.chat.svc.cluster.local")
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
-        self.redis = None
+        self.pool = None
         self.pubsub = None
 
     async def connect(self):
-        if not self.redis:
+        if not self.pool:
             try:
-                self.redis = Redis(host=self.redis_host, port=self.redis_port, decode_responses=True)
+                self.pool = ConnectionPool(
+                    host=self.redis_host,
+                    port=self.redis_port,
+                    decode_responses=True,
+                    max_connections=10
+                )
+                self.redis = Redis(connection_pool=self.pool)
                 await self.redis.ping()
                 self.pubsub = self.redis.pubsub()
                 print(f"Connected to Redis at {self.redis_host}:{self.redis_port}")
-            except Exception as e:
+            except RedisError as e:
                 print(f"Failed to connect to Redis: {e}")
-                raise
+                await self.reconnect()
+
+    async def reconnect(self, max_retries=3):
+        for attempt in range(max_retries):
+            try:
+                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                await self.connect()
+                return
+            except RedisError as e:
+                print(f"Reconnection attempt {attempt + 1} failed: {e}")
+        raise Exception("Failed to reconnect to Redis after multiple attempts")
 
     async def publish(self, channel, message):
-        if not self.redis:
-            await self.connect()
-        await self.redis.publish(channel, message)
+        try:
+            if not self.pool:
+                await self.connect()
+            return await self.redis.publish(channel, message)
+        except RedisError as e:
+            print(f"Error publishing message: {e}")
+            await self.reconnect()
+            return await self.redis.publish(channel, message)
 
     async def subscribe(self, channel):
-        if not self.pubsub:
-            await self.connect()
-        await self.pubsub.subscribe(channel)
+        try:
+            if not self.pubsub:
+                await self.connect()
+            await self.pubsub.subscribe(channel)
+        except RedisError as e:
+            print(f"Error subscribing to channel: {e}")
+            await self.reconnect()
+            await self.pubsub.subscribe(channel)
 
     async def listen(self):
         if not self.pubsub:
@@ -40,10 +67,13 @@ class RedisManager:
                 message = await self.pubsub.get_message(ignore_subscribe_messages=True)
                 if message is not None:
                     yield json.loads(message['data'])
-            except Exception as e:
+            except RedisError as e:
                 print(f"Error while listening: {e}")
+                await self.reconnect()
+            except Exception as e:
+                print(f"Unexpected error while listening: {e}")
                 await asyncio.sleep(1)
 
     async def close(self):
-        if self.redis:
-            await self.redis.close()
+        if self.pool:
+            await self.pool.disconnect()
