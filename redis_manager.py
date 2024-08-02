@@ -10,31 +10,25 @@ class RedisManager:
     def __init__(self):
         self.redis_service = os.getenv("REDIS_SERVICE", "redis-service")
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
-        self.redis_replicas = int(os.getenv("REDIS_REPLICAS", 3))
         self.redis = None
         self.pubsub = None
 
     async def connect(self, max_retries=5, retry_delay=5):
         for attempt in range(max_retries):
             try:
-                if not self.redis:
-                    for i in range(self.redis_replicas):
-                        try:
-                            redis_host = f"redis-{i}.redis-service.chat.svc.cluster.local"
-                            redis_url = f"redis://{redis_host}:{self.redis_port}"
-                            self.redis = await aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
-                            await self.redis.ping()  # Test the connection
-                            self.pubsub = self.redis.pubsub()
-                            logger.info(f"Successfully connected to Redis at {redis_url}")
-                            return
-                        except aioredis.RedisError as e:
-                            logger.warning(f"Failed to connect to Redis at {redis_url}: {str(e)}")
-                    raise Exception("Failed to connect to any Redis replica")
-            except Exception as e:
-                logger.error(f"Failed to connect to Redis (attempt {attempt + 1}/{max_retries}): {str(e)}")
+                redis_host = f"{self.redis_service}.chat.svc.cluster.local"
+                redis_url = f"redis://{redis_host}:{self.redis_port}"
+                self.redis = await aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+                await self.redis.ping()  # Test the connection
+                self.pubsub = self.redis.pubsub()
+                logger.info(f"Successfully connected to Redis at {redis_url}")
+                return
+            except aioredis.RedisError as e:
+                logger.warning(f"Failed to connect to Redis at {redis_url}: {str(e)}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
-        raise Exception("Failed to connect to Redis after multiple attempts")
+                else:
+                    raise Exception(f"Failed to connect to Redis after {max_retries} attempts")
 
     async def publish(self, channel, message):
         try:

@@ -70,7 +70,7 @@ async def startup_event():
         logger.info(f"Redis test: {value}")
     except Exception as e:
         logger.error(f"Redis connection test failed: {str(e)}")
-
+        
 @app.on_event("shutdown")
 async def shutdown_event():
     await redis_manager.close()
