@@ -41,17 +41,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         while True:
             data = await websocket.receive_text()
             logger.debug(f"Received message from {client_id}: {data}")
-
-            # 스팸 체크
-            is_allowed, warning = await redis_manager.check_spam(client_id, data)
-            if not is_allowed:
-                await websocket.send_json({
-                    "type": "warning",
-                    "message": warning
-                })
-                logger.warning(f"Spam warning sent to {client_id}: {warning}")
-                continue
-
             message = {
                 "client_id": client_id,
                 "message": data,
@@ -59,12 +48,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             }
 
             await redis_manager.publish("chat", json.dumps(message))
-            await redis_manager.add_message(json.dumps(message))
             logger.debug(f"Published message to Redis: {message}")
     except WebSocketDisconnect:
         logger.info(f"Client disconnected: {client_id}")
     except Exception as e:
-        logger.error(f"Error in websocket connection: {str(e)}", exc_info=True)
+        logger.error(f"Error in websocket connection: {str(e)}")
     finally:
         if client_id in active_connections:
             del active_connections[client_id]
