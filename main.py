@@ -4,21 +4,16 @@ from fastapi.responses import HTMLResponse
 from datetime import datetime
 import json
 import logging
+import asyncio
 from redis_manager import RedisManager
 
-# 로깅 설정
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
-
-# Static 파일 서빙
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Redis 매니저 초기화
 redis_manager = RedisManager()
-
-# 활성 WebSocket 연결을 저장할 딕셔너리
 active_connections = {}
 
 @app.get("/")
@@ -26,6 +21,13 @@ async def get():
     with open("static/index.html", "r") as file:
         content = file.read()
     return HTMLResponse(content)
+
+async def broadcast_messages():
+    await redis_manager.subscribe("chat")
+    async for message in redis_manager.listen():
+        for connection in active_connections.values():
+            await connection.send_json(message)
+            logger.debug(f"Broadcasted message to client: {message}")
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -42,14 +44,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 "timestamp": datetime.now().isoformat()
             }
             
-            # Redis에 메시지 발행
             await redis_manager.publish("chat", json.dumps(message))
             logger.debug(f"Published message to Redis: {message}")
-            
-            # 모든 연결된 클라이언트에게 메시지 브로드캐스트
-            for conn_id, connection in active_connections.items():
-                await connection.send_json(message)
-                logger.debug(f"Sent message to client: {conn_id}")
     except WebSocketDisconnect:
         del active_connections[client_id]
         logger.info(f"Client disconnected: {client_id}")
@@ -60,8 +56,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 async def startup_event():
     await redis_manager.connect()
     logger.info("Connected to Redis")
-
-# 나머지 코드는 그대로 유지
+    asyncio.create_task(broadcast_messages())
+    logger.info("Started message broadcasting task")
 
 @app.on_event("shutdown")
 async def shutdown_event():
