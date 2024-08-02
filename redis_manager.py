@@ -1,21 +1,22 @@
 import os
 import json
 import asyncio
-from redis.asyncio import RedisCluster
+from redis.asyncio import Redis
 
 class RedisManager:
     def __init__(self):
-        self.redis_hosts = os.getenv("REDIS_HOSTS", "redis-cluster-0.redis-cluster.chat.svc.cluster.local:6379,redis-cluster-1.redis-cluster.chat.svc.cluster.local:6379,redis-cluster-2.redis-cluster.chat.svc.cluster.local:6379,redis-cluster-3.redis-cluster.chat.svc.cluster.local:6379,redis-cluster-4.redis-cluster.chat.svc.cluster.local:6379,redis-cluster-5.redis-cluster.chat.svc.cluster.local:6379").split(',')
+        self.redis_host = os.getenv("REDIS_HOST", "redis-cluster-0.redis-cluster.chat.svc.cluster.local")
+        self.redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.redis = None
         self.pubsub = None
 
     async def connect(self):
         if not self.redis:
             try:
-                startup_nodes = [{"host": host.split(':')[0], "port": int(host.split(':')[1])} for host in self.redis_hosts]
-                self.redis = RedisCluster(startup_nodes=startup_nodes, decode_responses=True)
-                await self.redis.initialize()
+                self.redis = Redis(host=self.redis_host, port=self.redis_port, decode_responses=True)
+                await self.redis.ping()
                 self.pubsub = self.redis.pubsub()
+                print(f"Connected to Redis at {self.redis_host}:{self.redis_port}")
             except Exception as e:
                 print(f"Failed to connect to Redis: {e}")
                 raise
@@ -40,7 +41,7 @@ class RedisManager:
                     yield json.loads(message['data'])
             except Exception as e:
                 print(f"Error while listening: {e}")
-                await asyncio.sleep(1)  # 오류 발생 시 잠시 대기
+                await asyncio.sleep(1)
 
     async def close(self):
         if self.redis:
