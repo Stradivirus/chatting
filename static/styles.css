@@ -13,15 +13,16 @@ body, html {
 
 .header {
     height: 8%;
-    background-color: #87CEEB;  /* 하늘색 */
+    background-color: white;  /* 배경색을 흰색으로 변경 */
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .header h1 {
-    color: white;
+    color: #87CEEB;  /* 글자색을 하늘색으로 변경 */
     margin: 0;
+    font-size: 24px;
 }
 
 .main-content {
@@ -48,22 +49,6 @@ body, html {
     flex-grow: 1;
     overflow-y: auto;
     padding: 20px;
-    display: flex;
-    flex-direction: column;
-}
-
-.message {
-    max-width: 70%;
-    padding: 10px;
-    margin-bottom: 10px;
-    border-radius: 10px;
-    background-color: #f1f0f0;
-    align-self: flex-start;
-}
-
-.user-message {
-    background-color: #e1f5fe;
-    align-self: flex-end;
 }
 
 .chat-input {
@@ -90,13 +75,4 @@ body, html {
 
 #send-button:hover {
     background-color: #0056b3;
-}
-
-.warning-message {
-    background-color: #ffcccc;
-    color: #ff0000;
-    padding: 10px;
-    margin: 5px 0;
-    border-radius: 5px;
-    font-weight: bold;
 }
