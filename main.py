@@ -64,6 +64,6 @@ async def shutdown_event():
     await redis_manager.close()
     logger.info("Closed Redis connection")
 
-if name == "main":
+if __name__ == "main":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
