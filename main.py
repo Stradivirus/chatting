@@ -3,7 +3,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from datetime import datetime
 import json
+import logging
 from redis_manager import RedisManager
+
+# 로깅 설정
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -26,9 +31,11 @@ async def get():
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
     active_connections[client_id] = websocket
+    logger.info(f"New client connected: {client_id}")
     try:
         while True:
             data = await websocket.receive_text()
+            logger.debug(f"Received message from {client_id}: {data}")
             message = {
                 "client_id": client_id,
                 "message": data,
@@ -37,12 +44,27 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             
             # Redis에 메시지 발행
             await redis_manager.publish("chat", json.dumps(message))
+            logger.debug(f"Published message to Redis: {message}")
             
             # 모든 연결된 클라이언트에게 메시지 브로드캐스트
-            for connection in active_connections.values():
+            for conn_id, connection in active_connections.items():
                 await connection.send_json(message)
+                logger.debug(f"Sent message to client: {conn_id}")
     except WebSocketDisconnect:
         del active_connections[client_id]
+        logger.info(f"Client disconnected: {client_id}")
+    except Exception as e:
+        logger.error(f"Error in websocket connection: {str(e)}")
+
+@app.on_event("startup")
+async def startup_event():
+    await redis_manager.connect()
+    logger.info("Connected to Redis")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await redis_manager.close()
+    logger.info("Closed Redis connection")
 
 if __name__ == "__main__":
     import uvicorn
