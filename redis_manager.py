@@ -88,14 +88,18 @@ class RedisManager:
             
             if last_message == message:
                 repeat_count = await self.redis.incr(repeat_key)
-                await self.redis.expire(repeat_key, 5)  # 5초 후 만료
             else:
                 repeat_count = 1
                 await self.redis.set(repeat_key, repeat_count)
-                await self.redis.expire(repeat_key, 5)
+            
+            await self.redis.expire(repeat_key, 5)  # 5초 후 만료
+            await self.redis.set(last_message_key, message)
+
+            logger.debug(f"Repeat count for {client_id}: {repeat_count}")
 
             if repeat_count >= 5:
                 await self.redis.setex(f"spam_block:{client_id}", 5, "repeat")
+                logger.warning(f"Spam detected: repeated message from {client_id}")
                 return False, "도배 방지: 같은 메시지를 반복하지 마세요."
 
             # 2. 5초에 8번 이상 채팅 체크
@@ -104,21 +108,23 @@ class RedisManager:
             if freq_count == 1:
                 await self.redis.expire(freq_key, 5)  # 5초 후 만료
 
+            logger.debug(f"Frequency count for {client_id}: {freq_count}")
+
             if freq_count > 8:
                 await self.redis.setex(f"spam_block:{client_id}", 10, "frequency")
+                logger.warning(f"Spam detected: high frequency from {client_id}")
                 return False, "도배 방지: 너무 빠른 속도로 채팅을 보내고 있습니다."
-
-            # 스팸이 아닌 경우, 이전 메시지 업데이트
-            await self.redis.set(last_message_key, message)
 
             return True, None
         except RedisError as e:
-            print(f"Error checking spam: {e}")
+            logger.error(f"Error checking spam: {e}")
             return True, None  # 에러 발생 시 기본적으로 허용
 
     async def is_blocked(self, client_id):
         try:
-            return await self.redis.get(f"spam_block:{client_id}") is not None
+            blocked = await self.redis.get(f"spam_block:{client_id}")
+            logger.debug(f"Block status for {client_id}: {'Blocked' if blocked else 'Not blocked'}")
+            return blocked is not None
         except RedisError as e:
-            print(f"Error checking block status: {e}")
+            logger.error(f"Error checking block status: {e}")
             return False

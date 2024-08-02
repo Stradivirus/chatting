@@ -48,6 +48,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "type": "warning",
                     "message": warning
                 })
+                logger.warning(f"Spam warning sent to {client_id}: {warning}")
                 continue
 
             if await redis_manager.is_blocked(client_id):
@@ -55,6 +56,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "type": "warning",
                     "message": "도배 방지: 현재 채팅이 제한되었습니다."
                 })
+                logger.warning(f"Block warning sent to {client_id}")
                 continue
 
             message = {
