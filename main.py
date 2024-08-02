@@ -32,6 +32,31 @@ async def broadcast_messages():
         )
         logger.debug(f"Broadcasted message to all clients: {message}")
 
+async def check_spam(client_id: str, message: str) -> bool:
+    spam_key = f"spam:{client_id}"
+    block_key = f"block:{client_id}"
+    
+    # 차단 여부 확인
+    block_time = await redis_manager.get(block_key)
+    if block_time:
+        remaining_time = max(0, int(float(block_time)))
+        return True, remaining_time
+
+    # 최근 메시지 가져오기
+    recent_messages = await redis_manager.lrange(spam_key, 0, -1)
+    
+    # 같은 메시지가 연속으로 3번 이상 있는지 확인
+    if len(recent_messages) >= 2 and all(msg == message for msg in recent_messages[-2:]):
+        # 차단 설정
+        await redis_manager.setex(block_key, 10, "10")
+        return True, 10
+
+    # 새 메시지 추가 및 오래된 메시지 제거
+    await redis_manager.lpush(spam_key, message)
+    await redis_manager.ltrim(spam_key, 0, 2)
+    
+    return False, 0
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
@@ -41,6 +66,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         while True:
             data = await websocket.receive_text()
             logger.debug(f"Received message from {client_id}: {data}")
+            
+            is_spam, remaining_time = await check_spam(client_id, data)
+            if is_spam:
+                warning = {
+                    "type": "warning",
+                    "message": f"도배 방지: {remaining_time}초 동안 채팅이 금지됩니다.",
+                    "remainingTime": remaining_time
+                }
+                await websocket.send_text(json.dumps(warning))
+                logger.warning(f"Spam detected from {client_id}")
+                continue
+            
             message = {
                 "client_id": client_id,
                 "message": data,

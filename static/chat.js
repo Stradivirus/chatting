@@ -6,6 +6,8 @@ const clientId = Date.now().toString();
 let ws;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
+let isBlocked = false;
+let blockTimer;
 
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -24,7 +26,7 @@ function connectWebSocket() {
         console.log("Received message:", event.data);
         const message = JSON.parse(event.data);
         if (message.type === 'warning') {
-            displayWarning(message.message);
+            displayWarning(message.message, message.remainingTime);
         } else {
             displayMessage(message);
         }
@@ -66,6 +68,11 @@ messageInput.onkeypress = function(e) {
 };
 
 function sendMessage() {
+    if (isBlocked) {
+        console.log("Cannot send message. User is currently blocked.");
+        return;
+    }
+    
     const message = messageInput.value.trim();
     if (message && ws && ws.readyState === WebSocket.OPEN) {
         console.log("Sending message:", message);
@@ -92,13 +99,26 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-function displayWarning(warningMessage) {
+function displayWarning(warningMessage, remainingTime) {
     messageInput.placeholder = warningMessage;
     messageInput.style.color = 'red';
-    setTimeout(() => {
-        messageInput.placeholder = '';
-        messageInput.style.color = '';
-    }, 5000);  // 5초 후 경고 메시지 제거
+    isBlocked = true;
+    
+    if (blockTimer) {
+        clearInterval(blockTimer);
+    }
+    
+    blockTimer = setInterval(() => {
+        remainingTime--;
+        if (remainingTime <= 0) {
+            clearInterval(blockTimer);
+            messageInput.placeholder = '';
+            messageInput.style.color = '';
+            isBlocked = false;
+        } else {
+            messageInput.placeholder = `도배 방지: ${remainingTime}초 동안 채팅이 금지됩니다.`;
+        }
+    }, 1000);
 }
 
 // DOM이 완전히 로드된 후 실행
