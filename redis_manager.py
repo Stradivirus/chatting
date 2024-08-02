@@ -12,8 +12,14 @@ class RedisManager:
             self.redis = await aioredis.create_redis_pool(f"redis://{self.redis_host}:{self.redis_port}")
 
     async def publish(self, channel, message):
-        await self.connect()
+        if not self.redis:
+            await self.connect()
         await self.redis.publish(channel, message)
+
+    async def subscribe(self, channel):
+        if not self.redis:
+            await self.connect()
+        return await self.redis.subscribe(channel)
 
     async def close(self):
         if self.redis:

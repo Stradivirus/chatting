@@ -4,87 +4,33 @@ const sendButton = document.getElementById('send-button');
 
 const clientId = Date.now().toString();
 let ws;
-let pingWs; // 수정: ping용 WebSocket 추가
-let isConnecting = false;
-let reconnectAttempts = 0;
-const maxReconnectAttempts = 5;
 
 function connectWebSocket() {
-    if (isConnecting) return;
-    isConnecting = true;
-
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProtocol}//${window.location.host}/ws/${clientId}`;
     ws = new WebSocket(wsUrl);
 
     ws.onopen = function() {
         console.log("WebSocket connection established");
-        isConnecting = false;
-        reconnectAttempts = 0;
-        updateUIConnectionStatus(true);
-        startPingInterval(); // 수정: ping 간격 시작
+        sendButton.disabled = false;
+        messageInput.disabled = false;
     };
 
     ws.onmessage = function(event) {
-        // 수정: ping 메시지 처리 추가
-        if (event.data === "ping") {
-            ws.send("pong");
-        } else {
-            const message = JSON.parse(event.data);
-            displayMessage(message);
-        }
+        const message = JSON.parse(event.data);
+        displayMessage(message);
     };
 
     ws.onclose = function(event) {
         console.log("WebSocket is closed. Attempting to reconnect...");
-        isConnecting = false;
-        updateUIConnectionStatus(false);
-        if (reconnectAttempts < maxReconnectAttempts) {
-            setTimeout(connectWebSocket, 5000 * Math.pow(2, reconnectAttempts));
-            reconnectAttempts++;
-        } else {
-            console.error("Max reconnection attempts reached. Please refresh the page.");
-        }
+        sendButton.disabled = true;
+        messageInput.disabled = true;
+        setTimeout(connectWebSocket, 5000);
     };
 
     ws.onerror = function(error) {
         console.error("WebSocket error:", error);
-        isConnecting = false;
     };
-}
-
-// 수정: ping 간격 함수 추가
-function startPingInterval() {
-    const pingWsUrl = `${wsProtocol}//${window.location.host}/ping`;
-    pingWs = new WebSocket(pingWsUrl);
-
-    pingWs.onopen = function() {
-        setInterval(() => {
-            if (pingWs.readyState === WebSocket.OPEN) {
-                pingWs.send("ping");
-            }
-        }, 30000);  // 30초마다 ping 전송
-    };
-
-    pingWs.onmessage = function(event) {
-        if (event.data === "pong") {
-            console.log("Received pong from server");
-        }
-    };
-
-    pingWs.onclose = function() {
-        setTimeout(startPingInterval, 5000);  // 5초 후 재연결 시도
-    };
-}
-
-function updateUIConnectionStatus(isConnected) {
-    sendButton.disabled = !isConnected;
-    messageInput.disabled = !isConnected;
-    if (isConnected) {
-        sendButton.textContent = "전송";
-    } else {
-        sendButton.textContent = "연결 중...";
-    }
 }
 
 sendButton.onclick = sendMessage;
@@ -100,9 +46,6 @@ function sendMessage() {
     if (message && ws && ws.readyState === WebSocket.OPEN) {
         ws.send(message);
         messageInput.value = '';
-    } else if (!ws || ws.readyState !== WebSocket.OPEN) {
-        console.log("WebSocket is not open. Attempting to reconnect...");
-        connectWebSocket();
     }
 }
 
@@ -121,10 +64,3 @@ function displayMessage(message) {
 
 // 페이지 로드 시 WebSocket 연결
 connectWebSocket();
-
-// 주기적으로 연결 상태 확인 및 재연결 시도
-setInterval(() => {
-    if (!ws || ws.readyState === WebSocket.CLOSED) {
-        connectWebSocket();
-    }
-}, 10000);
