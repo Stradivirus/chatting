@@ -1,34 +1,121 @@
-apiVersion: apps/v1
-kind: Deployment
+---
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: redis
+  name: redis-cluster-config
+  namespace: chat
+data:
+  redis.conf: |
+    cluster-enabled yes
+    cluster-config-file nodes.conf
+    cluster-node-timeout 5000
+    appendonly yes
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-cluster
   namespace: chat
 spec:
-  replicas: 1
+  serviceName: "redis-cluster"
+  replicas: 6
   selector:
     matchLabels:
-      app: redis
+      app: redis-cluster
   template:
     metadata:
       labels:
-        app: redis
+        app: redis-cluster
     spec:
       containers:
       - name: redis
-        image: redis:latest
+        image: redis:6.2-alpine
         ports:
         - containerPort: 6379
+          name: client
+        - containerPort: 16379
+          name: gossip
+        command: ["redis-server", "/conf/redis.conf"]
+        volumeMounts:
+        - name: conf
+          mountPath: /conf
+          readOnly: true
+      volumes:
+      - name: conf
+        configMap:
+          name: redis-cluster-config
+          items:
+          - key: redis.conf
+            path: redis.conf
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis-service
+  name: redis-cluster
+  namespace: chat
+  labels:
+    app: redis-cluster
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: client
+  - port: 16379
+    targetPort: 16379
+    name: gossip
+  clusterIP: None
+  selector:
+    app: redis-cluster
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-cluster-init
   namespace: chat
 spec:
-  selector:
-    app: redis
-  ports:
-    - protocol: TCP
-      port: 6379
-      targetPort: 6379
+  template:
+    spec:
+      containers:
+      - name: redis-cluster-init
+        image: redis:6.2-alpine
+        command: ["/bin/sh"]
+        args: 
+          - "-c"
+          - |
+            until kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 {end}' | wc -w | grep -q 6; do
+              echo "Waiting for all Redis pods to be ready..."
+              sleep 5
+            done
+            redis-cli --cluster create --cluster-replicas 1 $(kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 {end}') --cluster-yes
+      restartPolicy: OnFailure
+      serviceAccountName: redis-cluster-init-sa
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-cluster-init-sa
+  namespace: chat
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redis-cluster-init-role
+  namespace: chat
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redis-cluster-init-rolebinding
+  namespace: chat
+subjects:
+- kind: ServiceAccount
+  name: redis-cluster-init-sa
+  namespace: chat
+roleRef:
+  kind: Role
+  name: redis-cluster-init-role
+  apiGroup: rbac.authorization.k8s.io
