@@ -1,13 +1,9 @@
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
-const clientIdDisplay = document.getElementById('client-id-display');
 
 const clientId = Date.now().toString();
 let ws;
-
-// 클라이언트 ID를 상단에 표시
-clientIdDisplay.textContent = `Your ID: ${clientId}`;
 
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -61,7 +57,7 @@ function sendMessage() {
 function displayMessage(message) {
     console.log("Displaying message:", message);
     const messageElement = document.createElement('div');
-    messageElement.textContent = message.client_id === clientId ? `You: ${message.message}` : `${message.message}`;
+    messageElement.textContent = message.message;
     messageElement.classList.add('message');
     
     if (message.client_id === clientId) {
