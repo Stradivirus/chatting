@@ -67,29 +67,6 @@ spec:
   selector:
     app: redis-cluster
 ---
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: redis-cluster-init
-  namespace: chat
-spec:
-  template:
-    spec:
-      containers:
-      - name: redis-cluster-init
-        image: redis:6.2-alpine
-        command: ["/bin/sh"]
-        args: 
-          - "-c"
-          - |
-            until kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 {end}' | wc -w | grep -q 6; do
-              echo "Waiting for all Redis pods to be ready..."
-              sleep 5
-            done
-            redis-cli --cluster create --cluster-replicas 1 $(kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 {end}') --cluster-yes
-      restartPolicy: OnFailure
-      serviceAccountName: redis-cluster-init-sa
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
