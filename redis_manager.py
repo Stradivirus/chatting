@@ -20,9 +20,10 @@ class RedisManager:
                 if not self.redis:
                     for i in range(self.redis_replicas):
                         try:
-                            redis_host = f"{self.redis_service}-{i}.{self.redis_service}.chat.svc.cluster.local"
+                            redis_host = f"redis-{i}.redis-service.chat.svc.cluster.local"
                             redis_url = f"redis://{redis_host}:{self.redis_port}"
-                            self.redis = await aioredis.create_redis_pool(redis_url, encoding="utf-8", decode_responses=True)
+                            self.redis = await aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+                            await self.redis.ping()  # Test the connection
                             self.pubsub = self.redis.pubsub()
                             logger.info(f"Successfully connected to Redis at {redis_url}")
                             return
@@ -63,10 +64,9 @@ class RedisManager:
                     yield json.loads(message['data'])
             except Exception as e:
                 logger.error(f"Error while listening for messages: {str(e)}")
-                await asyncio.sleep(1)  # 오류 발생 시 잠시 대기
+                await asyncio.sleep(1)  # Wait a bit before retrying
 
     async def close(self):
         if self.redis:
-            self.redis.close()
-            await self.redis.wait_closed()
+            await self.redis.close()
             logger.info("Closed Redis connection")
