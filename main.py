@@ -24,6 +24,7 @@ async def get():
 
 async def broadcast_messages():
     await redis_manager.subscribe("chat")
+    logger.info("Subscribed to 'chat' channel")
     async for message in redis_manager.listen():
         try:
             message_data = json.loads(message) if isinstance(message, str) else message
@@ -61,10 +62,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
 @app.on_event("startup")
 async def startup_event():
-    await redis_manager.connect()
-    logger.info("Connected to Redis")
-    asyncio.create_task(broadcast_messages())
-    logger.info("Started message broadcasting task")
+    try:
+        await redis_manager.connect()
+        logger.info("Connected to Redis")
+        asyncio.create_task(broadcast_messages())
+        logger.info("Started message broadcasting task")
+    except Exception as e:
+        logger.error(f"Failed to initialize application: {str(e)}")
+        # 여기서 애플리케이션 종료 또는 다른 오류 처리 로직을 추가할 수 있습니다.
 
 @app.on_event("shutdown")
 async def shutdown_event():
