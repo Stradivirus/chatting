@@ -7,15 +7,20 @@
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <div class="header">G-CU8E CHAT</div>
-    <div class="main-container">
-        <div id="chat-container" class="chat-container">
-            <div id="chat-messages" class="chat-messages"></div>
-            <div class="chat-input">
-                <input type="text" id="message-input" placeholder="Type your message">
-                <button id="send-button">전송</button>
+    <div class="container">
+        <header class="header">
+            <h1>G-CU8E CHAT</h1>
+        </header>
+        <main class="main-content">
+            <div class="empty-space"></div>
+            <div id="chat-container" class="chat-container">
+                <div id="chat-messages" class="chat-messages"></div>
+                <div class="chat-input">
+                    <input type="text" id="message-input" placeholder="Type your message">
+                    <button id="send-button">전송</button>
+                </div>
             </div>
-        </div>
+        </main>
     </div>
     <script src="/static/chat.js"></script>
 </body>
