@@ -17,10 +17,12 @@ body {
     box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
 }
 
-#client-id-display {
+.client-id-display {
     padding: 10px;
-    background-color: #f0f0f0;
-    border-bottom: 1px solid #ddd;
+    background-color: #007bff;
+    color: white;
+    text-align: center;
+    font-weight: bold;
 }
 
 .chat-messages {
