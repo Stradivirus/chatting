@@ -52,14 +52,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 logger.warning(f"Spam warning sent to {client_id}: {warning}")
                 continue
 
-            if await redis_manager.is_blocked(client_id):
-                await websocket.send_json({
-                    "type": "warning",
-                    "message": "도배 방지: 현재 채팅이 제한되었습니다."
-                })
-                logger.warning(f"Block warning sent to {client_id}")
-                continue
-
             message = {
                 "client_id": client_id,
                 "message": data,
@@ -67,6 +59,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             }
 
             await redis_manager.publish("chat", json.dumps(message))
+            await redis_manager.add_message(json.dumps(message))
             logger.debug(f"Published message to Redis: {message}")
     except WebSocketDisconnect:
         logger.info(f"Client disconnected: {client_id}")

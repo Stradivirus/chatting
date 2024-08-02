@@ -84,52 +84,68 @@ class RedisManager:
             await self.pool.disconnect()
         logger.info("Closed Redis connection")
 
-    async def check_spam(self, client_id, message):
-        try:
-            # 1. 같은 채팅 5번 반복 체크
-            repeat_key = f"repeat:{client_id}"
-            last_message_key = f"last_message:{client_id}"
-            last_message = await self.redis.get(last_message_key)
-            
-            if last_message == message:
-                repeat_count = await self.redis.incr(repeat_key)
-            else:
-                repeat_count = 1
-                await self.redis.set(repeat_key, repeat_count)
-            
-            await self.redis.expire(repeat_key, 5)  # 5초 후 만료
-            await self.redis.set(last_message_key, message)
+    async def is_user_banned(self, username):
+        ban_key = f"ban:{username}"
+        return await self.redis.exists(ban_key)
 
-            logger.debug(f"Repeat count for {client_id}: {repeat_count}")
+    async def ban_user(self, username, duration=60):
+        ban_key = f"ban:{username}"
+        await self.redis.setex(ban_key, duration, 1)
+        logger.info(f"User {username} banned for {duration} seconds")
 
-            if repeat_count >= 5:
-                await self.redis.setex(f"spam_block:{client_id}", 5, "repeat")
-                logger.warning(f"Spam detected: repeated message from {client_id}")
-                return False, "도배 방지: 같은 메시지를 반복하지 마세요."
+    async def check_duplicate_message(self, username, message):
+        key = f"last_message:{username}"
+        last_message = await self.redis.get(key)
+        
+        if last_message == message:
+            duplicate_count_key = f"duplicate_count:{username}"
+            count = await self.redis.incr(duplicate_count_key)
+            await self.redis.expire(duplicate_count_key, 60)  # 1분 후 만료
+            logger.debug(f"Duplicate message from {username}. Count: {count}")
+            return count
+        else:
+            await self.redis.set(key, message)
+            await self.redis.delete(f"duplicate_count:{username}")
+            return 0
 
-            # 2. 5초에 8번 이상 채팅 체크
-            freq_key = f"freq:{client_id}"
-            freq_count = await self.redis.incr(freq_key)
-            if freq_count == 1:
-                await self.redis.expire(freq_key, 5)  # 5초 후 만료
+    async def reset_duplicate_count(self, username):
+        await self.redis.delete(f"duplicate_count:{username}")
 
-            logger.debug(f"Frequency count for {client_id}: {freq_count}")
+    async def check_rate_limit(self, username):
+        key = f'rate_limit:{username}'
+        pipeline = self.redis.pipeline()
+        
+        pipeline.incr(key)
+        pipeline.expire(key, 5)
+        pipeline.get(key)
+        
+        _, _, message_count = await pipeline.execute()
 
-            if freq_count > 8:
-                await self.redis.setex(f"spam_block:{client_id}", 10, "frequency")
-                logger.warning(f"Spam detected: high frequency from {client_id}")
-                return False, "도배 방지: 너무 빠른 속도로 채팅을 보내고 있습니다."
-
-            return True, None
-        except RedisError as e:
-            logger.error(f"Error checking spam: {e}", exc_info=True)
-            return True, None  # 에러 발생 시 기본적으로 허용
-
-    async def is_blocked(self, client_id):
-        try:
-            blocked = await self.redis.get(f"spam_block:{client_id}")
-            logger.debug(f"Block status for {client_id}: {'Blocked' if blocked else 'Not blocked'}")
-            return blocked is not None
-        except RedisError as e:
-            logger.error(f"Error checking block status: {e}", exc_info=True)
+        message_count = int(message_count) if message_count else 0
+        if message_count > 8:
+            await self.ban_user(username, 30)  # 1분 밴
+            logger.warning(f"Rate limit exceeded for {username}. User banned for 1 minute.")
             return False
+        
+        return True
+
+    async def check_spam(self, username, message):
+        if await self.is_user_banned(username):
+            return False, "현재 채팅이 제한되었습니다."
+
+        duplicate_count = await self.check_duplicate_message(username, message)
+        if duplicate_count >= 5:
+            await self.ban_user(username, 30)  # 1분 밴
+            return False, "도배 방지: 같은 메시지를 반복하지 마세요."
+
+        if not await self.check_rate_limit(username):
+            return False, "도배 방지: 너무 빠른 속도로 채팅을 보내고 있습니다."
+
+        return True, None
+
+    async def get_messages(self):
+        return await self.redis.lrange("chat_messages", 0, -1)
+
+    async def add_message(self, message):
+        await self.redis.rpush("chat_messages", message)
+        await self.redis.ltrim("chat_messages", -20, -1)  # 최근 20개 메시지만 유지
