@@ -8,20 +8,23 @@ from redis.exceptions import RedisError
 import aiohttp
 import logging
 
+# 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class RedisManager:
     def __init__(self):
+        # Redis 연결 정보 설정
         self.redis_host = os.getenv("REDIS_HOST", "redis-cluster.chat.svc.cluster.local")
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.pool = None
         self.pubsub = None
-        self.blocked_ips = set()
-        self.connection_counts = {}
-        self.max_connections_per_ip = 3
+        self.blocked_ips = set()  # 차단된 IP 주소 저장
+        self.connection_counts = {}  # IP별 연결 수 추적
+        self.max_connections_per_ip = 3  # IP당 최대 연결 수
 
     async def connect(self):
+        # Redis에 연결
         if not self.pool:
             try:
                 self.pool = ConnectionPool(
@@ -39,9 +42,10 @@ class RedisManager:
                 await self.reconnect()
 
     async def reconnect(self, max_retries=3):
+        # Redis 재연결 시도
         for attempt in range(max_retries):
             try:
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                await asyncio.sleep(2 ** attempt)  # 지수 백오프
                 await self.connect()
                 return
             except RedisError as e:
@@ -49,6 +53,7 @@ class RedisManager:
         raise Exception("Failed to reconnect to Redis after multiple attempts")
 
     async def publish(self, channel, message):
+        # 메시지 발행
         try:
             if not self.pool:
                 await self.connect()
@@ -59,6 +64,7 @@ class RedisManager:
             return await self.redis.publish(channel, message)
 
     async def subscribe(self, channel):
+        # 채널 구독
         try:
             if not self.pubsub:
                 await self.connect()
@@ -69,6 +75,7 @@ class RedisManager:
             await self.pubsub.subscribe(channel)
 
     async def listen(self):
+        # 메시지 수신
         if not self.pubsub:
             raise Exception("Not subscribed to any channel")
         while True:
@@ -84,10 +91,12 @@ class RedisManager:
                 await asyncio.sleep(1)
 
     async def close(self):
+        # Redis 연결 종료
         if self.pool:
             await self.pool.disconnect()
 
     async def check_ip(self, ip_address):
+        # IP 주소가 VPN/프록시인지 확인
         if ip_address in self.blocked_ips:
             logger.info(f"IP {ip_address} is in blocked list")
             return False
@@ -111,8 +120,14 @@ class RedisManager:
         return True
 
     async def is_allowed_connection(self, ip_address):
+        # 연결 허용 여부 확인
         try:
             ip = ipaddress.ip_address(ip_address)
+            
+            # 연결 수 제한 확인 (사설 IP와 공인 IP 모두에 적용)
+            if self.connection_counts.get(ip_address, 0) >= self.max_connections_per_ip:
+                logger.warning(f"IP {ip_address} has reached the maximum number of connections")
+                return False
             
             if ip.is_private:
                 logger.info(f"IP {ip_address} is private, allowing connection")
@@ -121,11 +136,6 @@ class RedisManager:
             if ip.is_global:
                 logger.info(f"IP {ip_address} is global, checking for VPN/Proxy")
                 if not await self.check_ip(ip_address):
-                    return False
-                
-                # 연결 수 제한 확인
-                if self.connection_counts.get(ip_address, 0) >= self.max_connections_per_ip:
-                    logger.warning(f"IP {ip_address} has reached the maximum number of connections")
                     return False
                 
                 return True
@@ -138,9 +148,11 @@ class RedisManager:
             return False
 
     def increment_connection_count(self, ip_address):
+        # IP 주소의 연결 수 증가
         self.connection_counts[ip_address] = self.connection_counts.get(ip_address, 0) + 1
 
     def decrement_connection_count(self, ip_address):
+        # IP 주소의 연결 수 감소
         if ip_address in self.connection_counts:
             self.connection_counts[ip_address] -= 1
             if self.connection_counts[ip_address] <= 0:
