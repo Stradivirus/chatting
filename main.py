@@ -47,7 +47,7 @@ async def check_spam(client_id: str, message: str) -> bool:
         return True
     
     # 2. 연속 동일 메시지 감지
-    if len(message_history[client_id]) >= 2 and all(m['content'] == message for m in message_history[client_id][-2:]):
+    if len(message_history[client_id]) >= 3 and all(m['content'] == message for m in message_history[client_id][-2:]):
         return True
     
     # 3. 메시지 길이 제한 (30자)
