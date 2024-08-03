@@ -63,50 +63,60 @@ async def check_spam(client_id: str, message: str) -> bool:
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     client_ip = websocket.client.host
+    
+    # 연결 허용 여부 확인을 연결 수락 전으로 이동
     if not await redis_manager.is_allowed_connection(client_ip):
         await websocket.close(code=1008, reason="Connection not allowed")
         return
 
-    redis_manager.increment_connection_count(client_ip)
-    
     try:
         await websocket.accept()
+        redis_manager.increment_connection_count(client_ip)
         active_connections[client_id] = websocket
         logger.info(f"New client connected: {client_id} from IP: {client_ip}")
         
         while True:
-            data = await websocket.receive_text()
-            logger.debug(f"Received message from {client_id}: {data}")
-            
-            if client_id in banned_users:
-                warning = {
-                    "type": "warning",
-                    "message": "You are currently banned from sending messages."
+            try:
+                data = await websocket.receive_text()
+                logger.debug(f"Received message from {client_id}: {data}")
+                
+                if client_id in banned_users:
+                    warning = {
+                        "type": "warning",
+                        "message": "You are currently banned from sending messages."
+                    }
+                    await websocket.send_text(json.dumps(warning))
+                    continue
+                
+                if await check_spam(client_id, data):
+                    banned_users.add(client_id)
+                    warning = {
+                        "type": "warning",
+                        "message": "You have been banned for 30 seconds due to spamming."
+                    }
+                    await websocket.send_text(json.dumps(warning))
+                    await asyncio.sleep(30)
+                    banned_users.remove(client_id)
+                    continue
+                
+                message = {
+                    "client_id": client_id,
+                    "message": data,
+                    "timestamp": datetime.now().isoformat()
                 }
-                await websocket.send_text(json.dumps(warning))
-                continue
-            
-            if await check_spam(client_id, data):
-                banned_users.add(client_id)
-                warning = {
-                    "type": "warning",
-                    "message": "You have been banned for 30 seconds due to spamming."
-                }
-                await websocket.send_text(json.dumps(warning))
-                await asyncio.sleep(30)
-                banned_users.remove(client_id)
-                continue
-            
-            message = {
-                "client_id": client_id,
-                "message": data,
-                "timestamp": datetime.now().isoformat()
-            }
 
-            await redis_manager.publish("chat", json.dumps(message))
-            logger.debug(f"Published message to Redis: {message}")
-    except WebSocketDisconnect:
-        logger.info(f"Client disconnected: {client_id}")
+                await redis_manager.publish("chat", json.dumps(message))
+                logger.debug(f"Published message to Redis: {message}")
+            except WebSocketDisconnect:
+                logger.info(f"Client disconnected: {client_id}")
+                break
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON received from client: {client_id}")
+            except asyncio.CancelledError:
+                logger.info(f"WebSocket connection cancelled for client: {client_id}")
+                break
+            except Exception as e:
+                logger.error(f"Error processing message from {client_id}: {str(e)}")
     except Exception as e:
         logger.error(f"Error in websocket connection: {str(e)}")
     finally:
