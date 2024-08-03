@@ -158,4 +158,9 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await redis_manager.
+    await redis_manager.close()
+    logger.info("Closed Redis connection")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
