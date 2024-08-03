@@ -124,16 +124,16 @@ class RedisManager:
         try:
             ip = ipaddress.ip_address(ip_address)
             
-            # 연결 수 제한 확인 (사설 IP와 공인 IP 모두에 적용)
-            if self.connection_counts.get(ip_address, 0) >= self.max_connections_per_ip:
-                logger.warning(f"IP {ip_address} has reached the maximum number of connections")
-                return False
-            
             if ip.is_private:
-                logger.info(f"IP {ip_address} is private, allowing connection")
+                logger.info(f"IP {ip_address} is private, allowing connection without restrictions")
                 return True
             
+            # 공인 IP에 대해서만 연결 수 제한 확인
             if ip.is_global:
+                if self.connection_counts.get(ip_address, 0) >= self.max_connections_per_ip:
+                    logger.warning(f"IP {ip_address} has reached the maximum number of connections")
+                    return False
+                
                 logger.info(f"IP {ip_address} is global, checking for VPN/Proxy")
                 if not await self.check_ip(ip_address):
                     return False
@@ -148,12 +148,14 @@ class RedisManager:
             return False
 
     def increment_connection_count(self, ip_address):
-        # IP 주소의 연결 수 증가
-        self.connection_counts[ip_address] = self.connection_counts.get(ip_address, 0) + 1
+        # 공인 IP 주소의 연결 수만 증가
+        if not ipaddress.ip_address(ip_address).is_private:
+            self.connection_counts[ip_address] = self.connection_counts.get(ip_address, 0) + 1
 
     def decrement_connection_count(self, ip_address):
-        # IP 주소의 연결 수 감소
-        if ip_address in self.connection_counts:
-            self.connection_counts[ip_address] -= 1
-            if self.connection_counts[ip_address] <= 0:
-                del self.connection_counts[ip_address]
+        # 공인 IP 주소의 연결 수만 감소
+        if not ipaddress.ip_address(ip_address).is_private:
+            if ip_address in self.connection_counts:
+                self.connection_counts[ip_address] -= 1
+                if self.connection_counts[ip_address] <= 0:
+                    del self.connection_counts[ip_address]
