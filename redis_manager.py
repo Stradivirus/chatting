@@ -18,14 +18,13 @@ class RedisManager:
         self.blocked_ips = set()
         self.connection_counts = {}
         self.max_connections_per_ip = 3
-        self.active_users_key = "active_users"  # 새로 추가: 활성 사용자를 저장할 키
+        self.active_users_key = "active_users"
 
     async def connect(self):
         if not self.redis:
             try:
                 self.redis = await RedisCluster.from_url(f"redis://{self.redis_hosts[0]}", decode_responses=True)
                 await self.redis.ping()
-                self.pubsub = self.redis.pubsub()
                 logger.info(f"Connected to Redis Cluster at {self.redis_hosts}")
             except RedisError as e:
                 logger.error(f"Failed to connect to Redis Cluster: {e}")
@@ -53,19 +52,21 @@ class RedisManager:
 
     async def subscribe(self, channel):
         try:
-            if not self.pubsub:
-                await self.connect()
+            self.pubsub = await self.redis.pubsub()
             await self.pubsub.subscribe(channel)
         except RedisError as e:
             logger.error(f"Error subscribing to channel: {e}")
             await self.reconnect()
+            self.pubsub = await self.redis.pubsub()
             await self.pubsub.subscribe(channel)
 
     async def listen(self):
-        if not self.pubsub:
-            raise Exception("Not subscribed to any channel")
         while True:
             try:
+                if not self.pubsub:
+                    self.pubsub = await self.redis.pubsub()
+                    await self.pubsub.subscribe("chat")
+                    await self.pubsub.subscribe("active_users")
                 message = await self.pubsub.get_message(ignore_subscribe_messages=True)
                 if message is not None:
                     yield json.loads(message['data'])
@@ -140,7 +141,6 @@ class RedisManager:
                 if self.connection_counts[ip_address] <= 0:
                     del self.connection_counts[ip_address]
 
-    # 새로 추가: 활성 사용자 추가
     async def add_active_user(self, client_id):
         try:
             await self.redis.sadd(self.active_users_key, client_id)
@@ -150,7 +150,6 @@ class RedisManager:
             logger.error(f"Error adding active user: {e}")
             await self.reconnect()
 
-    # 새로 추가: 활성 사용자 제거
     async def remove_active_user(self, client_id):
         try:
             await self.redis.srem(self.active_users_key, client_id)
@@ -160,7 +159,6 @@ class RedisManager:
             logger.error(f"Error removing active user: {e}")
             await self.reconnect()
 
-    # 새로 추가: 활성 사용자 수 조회
     async def get_active_users_count(self):
         try:
             return await self.redis.scard(self.active_users_key)
@@ -169,7 +167,6 @@ class RedisManager:
             await self.reconnect()
             return 0
 
-    # 새로 추가: 활성 사용자 수 발행
     async def publish_active_users(self, count):
         message = {
             "type": "active_users",
