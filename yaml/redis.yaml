@@ -10,6 +10,7 @@ data:
     cluster-config-file nodes.conf
     cluster-node-timeout 5000
     appendonly yes
+    protected-mode no
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -40,6 +41,13 @@ spec:
         - name: conf
           mountPath: /conf
           readOnly: true
+        env:
+        - name: REDIS_HOST
+          value: "redis-cluster.chat.svc.cluster.local"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: FASTAPI_SERVICE
+          value: "fastapi-service.chat.svc.cluster.local"
       volumes:
       - name: conf
         configMap:
@@ -96,3 +104,26 @@ roleRef:
   kind: Role
   name: redis-cluster-init-role
   apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-cluster-init
+  namespace: chat
+spec:
+  template:
+    spec:
+      serviceAccountName: redis-cluster-init-sa
+      restartPolicy: OnFailure
+      containers:
+      - name: redis-cluster-init
+        image: redis:6.2-alpine
+        command:
+        - sh
+        - -c
+        - |
+          until redis-cli -h redis-cluster-0.redis-cluster.chat.svc.cluster.local ping; do echo waiting for redis-cluster-0; sleep 2; done
+          redis-cli --cluster create \
+            $(kubectl get pods -l app=redis-cluster -n chat -o jsonpath='{range .items[*]}{.status.podIP}:6379 {end}') \
+            --cluster-replicas 1 \
+            --cluster-yes

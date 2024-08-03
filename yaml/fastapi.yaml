@@ -23,6 +23,8 @@ spec:
           value: "redis-cluster.chat.svc.cluster.local"
         - name: REDIS_PORT
           value: "6379"
+        - name: FASTAPI_SERVICE
+          value: "fastapi-service.chat.svc.cluster.local"
 ---
 apiVersion: v1
 kind: Service
@@ -36,4 +38,4 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 8000
-  type: ClusterIP  # 로드밸런서 타입 추가
+  type: ClusterIP
