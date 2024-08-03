@@ -54,7 +54,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         active_connections[client_id] = websocket
         logger.info(f"New client connected: {client_id} from IP: {client_ip}")
         
-        user_count = await redis_manager.increment_user_count()
+        user_count = await user_count_manager.increment()
         await broadcast_user_count(user_count)
         
         while True:
@@ -104,13 +104,15 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     finally:
         if client_id in active_connections:
             del active_connections[client_id]
-        if client_id in message_history:
-            del message_history[client_id]
         redis_manager.decrement_connection_count(client_ip)
-        user_count = await redis_manager.decrement_user_count()
+        user_count = await user_count_manager.decrement()
         await broadcast_user_count(user_count)
         logger.info(f"Connection closed for client: {client_id}")
 
+async def broadcast_user_count(count):
+    message = json.dumps({"type": "user_count", "count": count})
+    for connection in active_connections.values():
+        await connection.send_text(message)
 async def broadcast_user_count(count):
     message = json.dumps({"type": "user_count", "count": count})
     for connection in active_connections.values():
