@@ -7,6 +7,25 @@ import logging
 import asyncio
 from redis_manager import RedisManager
 
+class UserCountManager:
+    def __init__(self):
+        self.user_count = 0
+        self.lock = asyncio.Lock()
+
+    async def increment(self):
+        async with self.lock:
+            self.user_count += 1
+            return self.user_count
+
+    async def decrement(self):
+        async with self.lock:
+            self.user_count = max(0, self.user_count - 1)
+            return self.user_count
+
+    async def get_count(self):
+        async with self.lock:
+            return self.user_count
+        
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
