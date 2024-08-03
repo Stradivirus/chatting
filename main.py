@@ -7,7 +7,6 @@ import logging
 import asyncio
 from redis_manager import RedisManager
 
-# 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -17,7 +16,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 redis_manager = RedisManager()
 active_connections = {}
 
-# 도배 방지를 위한 변수들
 message_history = {}
 banned_users = set()
 
@@ -42,26 +40,22 @@ async def check_spam(client_id: str, message: str) -> bool:
     if client_id not in message_history:
         message_history[client_id] = []
     
-    # 1. 메시지 전송 간격 제한 (0.5초)
     if message_history[client_id] and (current_time - message_history[client_id][-1]['time']).total_seconds() < 0.5:
         return True
     
-    # 2. 연속 동일 메시지 감지
     if len(message_history[client_id]) >= 2 and all(m['content'] == message for m in message_history[client_id][-2:]):
         return True
     
-    # 3. 메시지 길이 제한 (30자)
     if len(message) > 30:
         return True
     
-    # 4. 메시지 전송 속도 제한
     five_seconds_ago = current_time - timedelta(seconds=5)
     recent_messages = [m for m in message_history[client_id] if m['time'] > five_seconds_ago]
     if len(recent_messages) >= 8:
         return True
     
     message_history[client_id].append({'content': message, 'time': current_time})
-    if len(message_history[client_id]) > 10:  # 최근 10개 메시지만 유지
+    if len(message_history[client_id]) > 10:
         message_history[client_id] = message_history[client_id][-10:]
     
     return False
@@ -69,47 +63,60 @@ async def check_spam(client_id: str, message: str) -> bool:
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     client_ip = websocket.client.host
+    
+    # 연결 허용 여부 확인을 연결 수락 전으로 이동
     if not await redis_manager.is_allowed_connection(client_ip):
-        await websocket.close(code=1008, reason="VPN or proxy detected")
+        await websocket.close(code=1008, reason="Connection not allowed")
         return
 
-    await websocket.accept()
-    active_connections[client_id] = websocket
-    logger.info(f"New client connected: {client_id} from IP: {client_ip}")
     try:
+        await websocket.accept()
+        redis_manager.increment_connection_count(client_ip)
+        active_connections[client_id] = websocket
+        logger.info(f"New client connected: {client_id} from IP: {client_ip}")
+        
         while True:
-            data = await websocket.receive_text()
-            logger.debug(f"Received message from {client_id}: {data}")
-            
-            if client_id in banned_users:
-                warning = {
-                    "type": "warning",
-                    "message": "You are currently banned from sending messages."
+            try:
+                data = await websocket.receive_text()
+                logger.debug(f"Received message from {client_id}: {data}")
+                
+                if client_id in banned_users:
+                    warning = {
+                        "type": "warning",
+                        "message": "You are currently banned from sending messages."
+                    }
+                    await websocket.send_text(json.dumps(warning))
+                    continue
+                
+                if await check_spam(client_id, data):
+                    banned_users.add(client_id)
+                    warning = {
+                        "type": "warning",
+                        "message": "You have been banned for 30 seconds due to spamming."
+                    }
+                    await websocket.send_text(json.dumps(warning))
+                    await asyncio.sleep(30)
+                    banned_users.remove(client_id)
+                    continue
+                
+                message = {
+                    "client_id": client_id,
+                    "message": data,
+                    "timestamp": datetime.now().isoformat()
                 }
-                await websocket.send_text(json.dumps(warning))
-                continue
-            
-            if await check_spam(client_id, data):
-                banned_users.add(client_id)
-                warning = {
-                    "type": "warning",
-                    "message": "You have been banned for 30 seconds due to spamming."
-                }
-                await websocket.send_text(json.dumps(warning))
-                await asyncio.sleep(30)  # 30초 후 차단 해제
-                banned_users.remove(client_id)
-                continue
-            
-            message = {
-                "client_id": client_id,
-                "message": data,
-                "timestamp": datetime.now().isoformat()
-            }
 
-            await redis_manager.publish("chat", json.dumps(message))
-            logger.debug(f"Published message to Redis: {message}")
-    except WebSocketDisconnect:
-        logger.info(f"Client disconnected: {client_id}")
+                await redis_manager.publish("chat", json.dumps(message))
+                logger.debug(f"Published message to Redis: {message}")
+            except WebSocketDisconnect:
+                logger.info(f"Client disconnected: {client_id}")
+                break
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON received from client: {client_id}")
+            except asyncio.CancelledError:
+                logger.info(f"WebSocket connection cancelled for client: {client_id}")
+                break
+            except Exception as e:
+                logger.error(f"Error processing message from {client_id}: {str(e)}")
     except Exception as e:
         logger.error(f"Error in websocket connection: {str(e)}")
     finally:
@@ -117,6 +124,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             del active_connections[client_id]
         if client_id in message_history:
             del message_history[client_id]
+        redis_manager.decrement_connection_count(client_ip)
         logger.info(f"Connection closed for client: {client_id}")
 
 @app.on_event("startup")

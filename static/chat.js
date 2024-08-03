@@ -101,7 +101,7 @@ function canSendMessage(message) {
         return false;
     }
 
-    if (lastMessages.length >= 3 && lastMessages.every(msg => msg === message)) {
+    if (lastMessages.length >= 5 && lastMessages.every(msg => msg === message)) {
         banUser("동일한 메시지를 연속으로 보냈습니다.");
         return false;
     }
@@ -113,7 +113,7 @@ function canSendMessage(message) {
 
     lastMessageTime = currentTime;
     lastMessages.push(message);
-    if (lastMessages.length > 3) {
+    if (lastMessages.length > 5) {
         lastMessages.shift();
     }
 
