@@ -163,7 +163,7 @@ class RedisManager:
         # 메시지를 Redis 히스토리에 추가
         try:
             await self.redis.lpush("recent_messages", message)
-            await self.redis.ltrim("recent_messages", 0, 19)  # 최근 20개 메시지만 유지
+            await self.redis.ltrim("recent_messages", 0, 99)  # 최근 100개 메시지만 유지
         except RedisError as e:
             logger.error(f"Error adding message to history: {e}")
             await self.reconnect()
@@ -171,21 +171,14 @@ class RedisManager:
     async def get_recent_messages(self, count=20):
         # 최근 메시지 가져오기
         try:
+            if count <= 0:
+                return []  # count가 0 이하면 빈 리스트 반환
             messages = await self.redis.lrange("recent_messages", 0, count - 1)
             return messages[::-1]  # 시간 순서대로 반환
         except RedisError as e:
             logger.error(f"Error getting recent messages: {e}")
             await self.reconnect()
             return []
-
-    async def clear_message_history(self):
-        # 메시지 히스토리 초기화
-        try:
-            await self.redis.delete("recent_messages")
-            logger.info("Message history cleared")
-        except RedisError as e:
-            logger.error(f"Error clearing message history: {e}")
-            await self.reconnect()
 
     async def get_connection_count(self):
         # 현재 연결 수 반환
