@@ -15,11 +15,13 @@ class UserCountManager:
     async def increment(self):
         async with self.lock:
             self.user_count += 1
+            logger.debug(f"User count incremented to {self.user_count}")
             return self.user_count
 
     async def decrement(self):
         async with self.lock:
             self.user_count = max(0, self.user_count - 1)
+            logger.debug(f"User count decremented to {self.user_count}")
             return self.user_count
 
     async def get_count(self):
@@ -96,9 +98,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         await websocket.accept()
         redis_manager.increment_connection_count(client_ip)
         active_connections[client_id] = websocket
-        logger.info(f"New client connected: {client_id} from IP: {client_ip}")
         
         user_count = await user_count_manager.increment()
+        logger.info(f"New client connected: {client_id} from IP: {client_ip}. Total users: {user_count}")
         await broadcast_user_count(user_count)
         
         while True:
@@ -151,7 +153,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         redis_manager.decrement_connection_count(client_ip)
         user_count = await user_count_manager.decrement()
         await broadcast_user_count(user_count)
-        logger.info(f"Connection closed for client: {client_id}")
+        logger.info(f"Connection closed for client: {client_id}. Total users: {user_count}")
+
+async def broadcast_user_count(count):
+    message = json.dumps({"type": "user_count", "count": count})
+    logger.debug(f"Broadcasting user count: {count}")
+    for connection in active_connections.values():
+        await connection.send_text(message)
 
 async def broadcast_user_count(count):
     message = json.dumps({"type": "user_count", "count": count})
