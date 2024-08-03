@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from datetime import datetime, timedelta
@@ -7,27 +7,6 @@ import logging
 import asyncio
 from redis_manager import RedisManager
 
-class UserCountManager:
-    def __init__(self):
-        self.user_count = 0
-        self.lock = asyncio.Lock()
-
-    async def increment(self):
-        async with self.lock:
-            self.user_count += 1
-            logger.debug(f"User count incremented to {self.user_count}")
-            return self.user_count
-
-    async def decrement(self):
-        async with self.lock:
-            self.user_count = max(0, self.user_count - 1)
-            logger.debug(f"User count decremented to {self.user_count}")
-            return self.user_count
-
-    async def get_count(self):
-        async with self.lock:
-            return self.user_count
-        
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -37,28 +16,37 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 redis_manager = RedisManager()
 active_connections = {}
 
-# UserCountManager 인스턴스 생성
-user_count_manager = UserCountManager()
-
 message_history = {}
 banned_users = set()
+
+class UserCountManager:
+    def __init__(self):
+        self.user_count = 0
+        self.lock = asyncio.Lock()
+
+    async def increment(self):
+        async with self.lock:
+            self.user_count += 1
+            logger.info(f"User count incremented to {self.user_count}")
+            return self.user_count
+
+    async def decrement(self):
+        async with self.lock:
+            self.user_count = max(0, self.user_count - 1)
+            logger.info(f"User count decremented to {self.user_count}")
+            return self.user_count
+
+    async def get_count(self):
+        async with self.lock:
+            return self.user_count
+
+user_count_manager = UserCountManager()
 
 @app.get("/")
 async def get():
     with open("static/index.html", "r") as file:
         content = file.read()
     return HTMLResponse(content)
-
-async def broadcast_messages():
-    await redis_manager.subscribe("chat")
-    async for message in redis_manager.listen():
-        await asyncio.gather(
-            *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
-            return_exceptions=True
-        )
-        # 메시지를 Redis에 저장
-        await redis_manager.add_message_to_history(json.dumps(message))
-        logger.debug(f"Broadcasted and stored message: {message}")
 
 async def check_spam(client_id: str, message: str) -> bool:
     current_time = datetime.now()
@@ -88,19 +76,12 @@ async def check_spam(client_id: str, message: str) -> bool:
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    client_ip = websocket.client.host
+    await websocket.accept()
+    active_connections[client_id] = websocket
     
-    if not await redis_manager.is_allowed_connection(client_ip):
-        await websocket.close(code=1008, reason="Connection not allowed")
-        return
-
     try:
-        await websocket.accept()
-        redis_manager.increment_connection_count(client_ip)
-        active_connections[client_id] = websocket
-        
         user_count = await user_count_manager.increment()
-        logger.info(f"New client connected: {client_id} from IP: {client_ip}. Total users: {user_count}")
+        logger.info(f"New client connected: {client_id}. Total users: {user_count}")
         await broadcast_user_count(user_count)
         
         while True:
@@ -133,36 +114,32 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "timestamp": datetime.now().isoformat()
                 }
 
-                await redis_manager.publish("chat", json.dumps(message))
-                logger.debug(f"Published message to Redis: {message}")
+                await broadcast_message(message)
+                await redis_manager.add_message_to_history(json.dumps(message))
+                logger.debug(f"Broadcasted and stored message: {message}")
             except WebSocketDisconnect:
                 logger.info(f"Client disconnected: {client_id}")
                 break
-            except json.JSONDecodeError:
-                logger.warning(f"Invalid JSON received from client: {client_id}")
-            except asyncio.CancelledError:
-                logger.info(f"WebSocket connection cancelled for client: {client_id}")
-                break
             except Exception as e:
                 logger.error(f"Error processing message from {client_id}: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error in websocket connection: {str(e)}")
+                break
     finally:
         if client_id in active_connections:
             del active_connections[client_id]
-        redis_manager.decrement_connection_count(client_ip)
+        if client_id in message_history:
+            del message_history[client_id]
         user_count = await user_count_manager.decrement()
         await broadcast_user_count(user_count)
         logger.info(f"Connection closed for client: {client_id}. Total users: {user_count}")
 
 async def broadcast_user_count(count):
     message = json.dumps({"type": "user_count", "count": count})
-    logger.debug(f"Broadcasting user count: {count}")
-    for connection in active_connections.values():
-        await connection.send_text(message)
+    logger.info(f"Broadcasting user count: {count}")
+    await broadcast_message(message)
 
-async def broadcast_user_count(count):
-    message = json.dumps({"type": "user_count", "count": count})
+async def broadcast_message(message):
+    if isinstance(message, dict):
+        message = json.dumps(message)
     for connection in active_connections.values():
         await connection.send_text(message)
 
@@ -171,8 +148,6 @@ async def startup_event():
     try:
         await redis_manager.connect()
         logger.info("Connected to Redis")
-        asyncio.create_task(broadcast_messages())
-        logger.info("Started message broadcasting task")
     except Exception as e:
         logger.error(f"Failed to start up properly: {e}", exc_info=True)
         raise
