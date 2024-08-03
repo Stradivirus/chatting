@@ -52,23 +52,17 @@ class RedisManager:
 
     async def subscribe(self, channel):
         try:
-            self.pubsub = await self.redis.pubsub()
-            await self.pubsub.subscribe(channel)
+            await self.redis.subscribe(channel)
         except RedisError as e:
             logger.error(f"Error subscribing to channel: {e}")
             await self.reconnect()
-            self.pubsub = await self.redis.pubsub()
-            await self.pubsub.subscribe(channel)
+            await self.redis.subscribe(channel)
 
     async def listen(self):
         while True:
             try:
-                if not self.pubsub:
-                    self.pubsub = await self.redis.pubsub()
-                    await self.pubsub.subscribe("chat")
-                    await self.pubsub.subscribe("active_users")
-                message = await self.pubsub.get_message(ignore_subscribe_messages=True)
-                if message is not None:
+                message = await self.redis.get_message(timeout=1)
+                if message and message['type'] == 'message':
                     yield json.loads(message['data'])
             except RedisError as e:
                 logger.error(f"Error while listening: {e}")
@@ -143,6 +137,10 @@ class RedisManager:
 
     async def add_active_user(self, client_id):
         try:
+            key_type = await self.redis.type(self.active_users_key)
+            if key_type != 'set':
+                await self.redis.delete(self.active_users_key)
+            
             await self.redis.sadd(self.active_users_key, client_id)
             count = await self.get_active_users_count()
             await self.publish_active_users(count)
