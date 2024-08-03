@@ -8,6 +8,7 @@ from redis.exceptions import RedisError
 import aiohttp
 import logging
 
+# 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,15 @@ class RedisManager:
             await self.reconnect()
             return await self.redis.publish(channel, message)
 
+    async def add_message_to_history(self, message):
+        # 메시지를 Redis 히스토리에 추가 (최대 100개 유지)
+        try:
+            await self.redis.lpush("recent_messages", message)
+            await self.redis.ltrim("recent_messages", 0, 99)  # 최근 100개 메시지만 유지
+        except RedisError as e:
+            logger.error(f"Error adding message to history: {e}")
+            await self.reconnect()
+    
     async def subscribe(self, channel):
         # 채널 구독
         try:
@@ -89,6 +99,16 @@ class RedisManager:
                 logger.error(f"Unexpected error while listening: {e}")
                 await asyncio.sleep(1)
 
+    async def increment_user_count(self):
+        return await self.redis.incr("user_count")
+
+    async def decrement_user_count(self):
+        return await self.redis.decr("user_count")
+
+    async def get_user_count(self):
+        count = await self.redis.get("user_count")
+        return int(count) if count else 0
+    
     async def close(self):
         # Redis 연결 종료
         if self.pool:
@@ -158,64 +178,3 @@ class RedisManager:
                 self.connection_counts[ip_address] -= 1
                 if self.connection_counts[ip_address] <= 0:
                     del self.connection_counts[ip_address]
-
-    async def add_message_to_history(self, message):
-        # 메시지를 Redis 히스토리에 추가
-        try:
-            await self.redis.lpush("recent_messages", message)
-            await self.redis.ltrim("recent_messages", 0, 99)  # 최근 100개 메시지만 유지
-        except RedisError as e:
-            logger.error(f"Error adding message to history: {e}")
-            await self.reconnect()
-
-    async def get_recent_messages(self, count=20):
-        # 최근 메시지 가져오기
-        try:
-            if count <= 0:
-                return []  # count가 0 이하면 빈 리스트 반환
-            messages = await self.redis.lrange("recent_messages", 0, count - 1)
-            return messages[::-1]  # 시간 순서대로 반환
-        except RedisError as e:
-            logger.error(f"Error getting recent messages: {e}")
-            await self.reconnect()
-            return []
-
-    async def get_connection_count(self):
-        # 현재 연결 수 반환
-        return sum(self.connection_counts.values())
-
-    async def get_blocked_ips(self):
-        # 차단된 IP 목록 반환
-        return list(self.blocked_ips)
-
-    async def unblock_ip(self, ip_address):
-        # IP 주소 차단 해제
-        if ip_address in self.blocked_ips:
-            self.blocked_ips.remove(ip_address)
-            logger.info(f"Unblocked IP: {ip_address}")
-        else:
-            logger.warning(f"Attempted to unblock non-blocked IP: {ip_address}")
-
-    async def set_max_connections_per_ip(self, max_connections):
-        # IP당 최대 연결 수 설정
-        self.max_connections_per_ip = max_connections
-        logger.info(f"Set max connections per IP to: {max_connections}")
-
-    async def get_redis_info(self):
-        # Redis 서버 정보 반환
-        try:
-            info = await self.redis.info()
-            return info
-        except RedisError as e:
-            logger.error(f"Error getting Redis info: {e}")
-            await self.reconnect()
-            return {}
-
-    async def ping(self):
-        # Redis 서버 연결 상태 확인
-        try:
-            return await self.redis.ping()
-        except RedisError as e:
-            logger.error(f"Error pinging Redis: {e}")
-            await self.reconnect()
-            return False

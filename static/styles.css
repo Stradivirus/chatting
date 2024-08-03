@@ -77,3 +77,11 @@ body {
     bottom: 0;
     z-index: 1000;
 }
+
+.user-count {
+    background-color: #f0f0f0;
+    padding: 10px;
+    text-align: center;
+    font-weight: bold;
+    border-bottom: 1px solid #ccc;
+}
