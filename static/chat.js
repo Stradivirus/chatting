@@ -1,6 +1,7 @@
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
+const activeUsersElement = document.getElementById('active-users');  // 새로 추가: 활성 사용자 수를 표시할 요소
 
 const clientId = Date.now().toString();
 let ws;
@@ -166,7 +167,7 @@ function updateBanWarning() {
 function displayMessage(message) {
     console.log("Displaying message:", message);
     const messageElement = document.createElement('div');
-    messageElement.textContent = message.message;
+    messageElement.textContent = `${message.client_id}: ${message.message}`;
     messageElement.classList.add('message');
 
     if (message.client_id === clientId) {
@@ -197,8 +198,7 @@ function removeWarning() {
 
 // 새로 추가: 접속자 수 업데이트 함수
 function updateActiveUsers(count) {
-    const activeUsersElement = document.getElementById('active-users');
-    activeUsersElement.textContent = `시청자 수: ${count}`;
+    activeUsersElement.textContent = `접속자 수: ${count}`;
 }
 
 // DOM이 완전히 로드된 후 실행

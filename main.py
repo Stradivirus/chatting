@@ -26,24 +26,22 @@ async def get():
     return HTMLResponse(content)
 
 async def broadcast_messages():
-    while True:
-        try:
-            await redis_manager.connect()
-            await redis_manager.subscribe("chat")
-            await redis_manager.subscribe("active_users")
-            
-            async for message in redis_manager.listen():
-                if isinstance(message, dict):  # 메시지가 올바른 형식인지 확인
-                    await asyncio.gather(
-                        *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
-                        return_exceptions=True
-                    )
-                    logger.debug(f"Broadcasted message to all clients: {message}")
-                else:
-                    logger.warning(f"Received invalid message format: {message}")
-        except Exception as e:
-            logger.error(f"Error in broadcast_messages: {e}")
-            await asyncio.sleep(5)  # 오류 발생 시 5초 대기 후 재시도
+    await redis_manager.subscribe("chat")
+    # 새로 추가: active_users 채널 구독
+    await redis_manager.subscribe("active_users")
+    async for message in redis_manager.listen():
+        # 새로 추가: active_users 메시지 처리
+        if message.get("type") == "active_users":
+            await asyncio.gather(
+                *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
+                return_exceptions=True
+            )
+        else:
+            await asyncio.gather(
+                *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
+                return_exceptions=True
+            )
+        logger.debug(f"Broadcasted message to all clients: {message}")
 
 async def check_spam(client_id: str, message: str) -> bool:
     current_time = datetime.now()
