@@ -1,9 +1,11 @@
 import os
 import json
 import asyncio
+import ipaddress
 from redis.asyncio import Redis
 from redis.asyncio.connection import ConnectionPool
 from redis.exceptions import RedisError
+import aiohttp
 
 class RedisManager:
     def __init__(self):
@@ -11,6 +13,7 @@ class RedisManager:
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.pool = None
         self.pubsub = None
+        self.blocked_ips = set()
 
     async def connect(self):
         if not self.pool:
@@ -77,3 +80,41 @@ class RedisManager:
     async def close(self):
         if self.pool:
             await self.pool.disconnect()
+
+    async def check_ip(self, ip_address):
+        if ip_address in self.blocked_ips:
+            return False
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f'https://vpn-proxy-detection.com/api/check/{ip_address}') as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get('is_vpn') or data.get('is_proxy'):
+                            self.blocked_ips.add(ip_address)
+                            return False
+        except Exception as e:
+            print(f"Error checking IP {ip_address}: {e}")
+            # In case of error, we allow the connection
+            return True
+
+        return True
+
+    async def is_allowed_connection(self, ip_address):
+        try:
+            ip = ipaddress.ip_address(ip_address)
+            
+            # Allow private IP addresses (local network)
+            if ip.is_private:
+                return True
+            
+            # For public IP addresses, perform the VPN/proxy check
+            if ip.is_global:
+                return await self.check_ip(ip_address)
+            
+            # Block link-local, multicast, reserved, and unspecified addresses
+            return False
+
+        except ValueError:
+            # If the IP address is invalid, block the connection
+            return False

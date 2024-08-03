@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from datetime import datetime, timedelta
@@ -54,7 +54,7 @@ async def check_spam(client_id: str, message: str) -> bool:
     if len(message) > 30:
         return True
     
-    # 6. 메시지 전송 속도 제한
+    # 4. 메시지 전송 속도 제한
     five_seconds_ago = current_time - timedelta(seconds=5)
     recent_messages = [m for m in message_history[client_id] if m['time'] > five_seconds_ago]
     if len(recent_messages) >= 8:
@@ -68,9 +68,14 @@ async def check_spam(client_id: str, message: str) -> bool:
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    client_ip = websocket.client.host
+    if not await redis_manager.is_allowed_connection(client_ip):
+        await websocket.close(code=1008, reason="VPN or proxy detected")
+        return
+
     await websocket.accept()
     active_connections[client_id] = websocket
-    logger.info(f"New client connected: {client_id}")
+    logger.info(f"New client connected: {client_id} from IP: {client_ip}")
     try:
         while True:
             data = await websocket.receive_text()
