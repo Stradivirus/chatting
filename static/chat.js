@@ -198,7 +198,7 @@ function removeWarning() {
 // 새로 추가: 접속자 수 업데이트 함수
 function updateActiveUsers(count) {
     const activeUsersElement = document.getElementById('active-users');
-    activeUsersElement.textContent = `접속자 수: ${count}`;
+    activeUsersElement.textContent = `시청자 수: ${count}`;
 }
 
 // DOM이 완전히 로드된 후 실행

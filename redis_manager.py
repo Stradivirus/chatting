@@ -3,7 +3,6 @@ import json
 import asyncio
 import ipaddress
 from redis.asyncio import RedisCluster
-from redis.asyncio.cluster import ClusterPubSub
 from redis.exceptions import RedisError
 import aiohttp
 import logging
