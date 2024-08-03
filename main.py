@@ -149,7 +149,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 async def startup_event():
     try:
         await redis_manager.connect()
-        logger.info("Connected to Redis")
+        logger.info("Connected to Redis Cluster")
         asyncio.create_task(broadcast_messages())
         logger.info("Started message broadcasting task")
     except Exception as e:
