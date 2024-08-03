@@ -77,3 +77,12 @@ body {
     bottom: 0;
     z-index: 1000;
 }
+
+/* 새로 추가: 접속자 수 표시 스타일 */
+.active-users {
+    background-color: #007bff;
+    color: white;
+    padding: 10px;
+    text-align: center;
+    font-weight: bold;
+}

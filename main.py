@@ -27,11 +27,20 @@ async def get():
 
 async def broadcast_messages():
     await redis_manager.subscribe("chat")
+    # 새로 추가: active_users 채널 구독
+    await redis_manager.subscribe("active_users")
     async for message in redis_manager.listen():
-        await asyncio.gather(
-            *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
-            return_exceptions=True
-        )
+        # 새로 추가: active_users 메시지 처리
+        if message.get("type") == "active_users":
+            await asyncio.gather(
+                *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
+                return_exceptions=True
+            )
+        else:
+            await asyncio.gather(
+                *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
+                return_exceptions=True
+            )
         logger.debug(f"Broadcasted message to all clients: {message}")
 
 async def check_spam(client_id: str, message: str) -> bool:
@@ -64,7 +73,6 @@ async def check_spam(client_id: str, message: str) -> bool:
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     client_ip = websocket.client.host
     
-    # 연결 허용 여부 확인을 연결 수락 전으로 이동
     if not await redis_manager.is_allowed_connection(client_ip):
         await websocket.close(code=1008, reason="Connection not allowed")
         return
@@ -73,6 +81,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         await websocket.accept()
         redis_manager.increment_connection_count(client_ip)
         active_connections[client_id] = websocket
+        
+        # 새로 추가: 접속자 수 증가 및 브로드캐스트
+        await redis_manager.increment_active_users()
+        await redis_manager.publish_active_users()
+        
         logger.info(f"New client connected: {client_id} from IP: {client_ip}")
         
         while True:
@@ -125,6 +138,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         if client_id in message_history:
             del message_history[client_id]
         redis_manager.decrement_connection_count(client_ip)
+        
+        # 새로 추가: 접속자 수 감소 및 브로드캐스트
+        await redis_manager.decrement_active_users()
+        await redis_manager.publish_active_users()
+        
         logger.info(f"Connection closed for client: {client_id}")
 
 @app.on_event("startup")
@@ -140,9 +158,4 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await redis_manager.close()
-    logger.info("Closed Redis connection")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    await redis_manager.

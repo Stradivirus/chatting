@@ -34,6 +34,9 @@ function connectWebSocket() {
         const message = JSON.parse(event.data);
         if (message.type === 'warning') {
             displayWarning(message.message);
+        } else if (message.type === 'active_users') {
+            // 새로 추가: 접속자 수 업데이트 처리
+            updateActiveUsers(message.count);
         } else {
             displayMessage(message);
         }
@@ -190,6 +193,12 @@ function removeWarning() {
     if (existingWarning) {
         existingWarning.remove();
     }
+}
+
+// 새로 추가: 접속자 수 업데이트 함수
+function updateActiveUsers(count) {
+    const activeUsersElement = document.getElementById('active-users');
+    activeUsersElement.textContent = `접속자 수: ${count}`;
 }
 
 // DOM이 완전히 로드된 후 실행

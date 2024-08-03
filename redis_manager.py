@@ -22,6 +22,9 @@ class RedisManager:
         self.blocked_ips = set()  # 차단된 IP 주소 저장
         self.connection_counts = {}  # IP별 연결 수 추적
         self.max_connections_per_ip = 3  # IP당 최대 연결 수
+        
+        # 새로 추가: 접속자 수를 저장할 키
+        self.active_users_key = "active_users"
 
     async def connect(self):
         # Redis에 연결
@@ -159,3 +162,41 @@ class RedisManager:
                 self.connection_counts[ip_address] -= 1
                 if self.connection_counts[ip_address] <= 0:
                     del self.connection_counts[ip_address]
+
+    # 새로 추가: 접속자 수 증가
+    async def increment_active_users(self):
+        try:
+            return await self.redis.incr(self.active_users_key)
+        except RedisError as e:
+            logger.error(f"Error incrementing active users: {e}")
+            await self.reconnect()
+            return await self.redis.incr(self.active_users_key)
+
+    # 새로 추가: 접속자 수 감소
+    async def decrement_active_users(self):
+        try:
+            return await self.redis.decr(self.active_users_key)
+        except RedisError as e:
+            logger.error(f"Error decrementing active users: {e}")
+            await self.reconnect()
+            return await self.redis.decr(self.active_users_key)
+
+    # 새로 추가: 현재 접속자 수 조회
+    async def get_active_users(self):
+        try:
+            count = await self.redis.get(self.active_users_key)
+            return int(count) if count else 0
+        except RedisError as e:
+            logger.error(f"Error getting active users: {e}")
+            await self.reconnect()
+            count = await self.redis.get(self.active_users_key)
+            return int(count) if count else 0
+
+    # 새로 추가: 접속자 수 변경 브로드캐스트
+    async def publish_active_users(self):
+        active_users = await self.get_active_users()
+        message = {
+            "type": "active_users",
+            "count": active_users
+        }
+        await self.publish("active_users", json.dumps(message))
