@@ -7,12 +7,14 @@ import logging
 import asyncio
 from redis_manager import RedisManager
 
+# 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Redis 매니저 인스턴스 생성
 redis_manager = RedisManager()
 active_connections = {}
 
@@ -21,20 +23,25 @@ banned_users = set()
 
 @app.get("/")
 async def get():
+    # 메인 HTML 페이지 반환
     with open("static/index.html", "r") as file:
         content = file.read()
     return HTMLResponse(content)
 
 async def broadcast_messages():
+    # Redis의 'chat' 채널 구독 및 메시지 브로드캐스트
     await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
         await asyncio.gather(
             *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
             return_exceptions=True
         )
-        logger.debug(f"Broadcasted message to all clients: {message}")
+        # 메시지를 Redis 히스토리에 저장
+        await redis_manager.add_message_to_history(json.dumps(message))
+        logger.debug(f"Broadcasted and stored message: {message}")
 
 async def check_spam(client_id: str, message: str) -> bool:
+    # 스팸 체크 로직 (기존 코드 유지)
     current_time = datetime.now()
     
     if client_id not in message_history:
@@ -62,9 +69,9 @@ async def check_spam(client_id: str, message: str) -> bool:
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    # WebSocket 연결 처리
     client_ip = websocket.client.host
     
-    # 연결 허용 여부 확인을 연결 수락 전으로 이동
     if not await redis_manager.is_allowed_connection(client_ip):
         await websocket.close(code=1008, reason="Connection not allowed")
         return
@@ -74,6 +81,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         redis_manager.increment_connection_count(client_ip)
         active_connections[client_id] = websocket
         logger.info(f"New client connected: {client_id} from IP: {client_ip}")
+        
+        # 연결 직후 최근 20개의 메시지 전송
+        recent_messages = await redis_manager.get_recent_messages(20)
+        for message in recent_messages:
+            await websocket.send_text(message)
         
         while True:
             try:
@@ -129,6 +141,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
 @app.on_event("startup")
 async def startup_event():
+    # 앱 시작 시 Redis 연결 및 메시지 브로드캐스트 태스크 시작
     try:
         await redis_manager.connect()
         logger.info("Connected to Redis")
@@ -140,6 +153,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    # 앱 종료 시 Redis 연결 종료
     await redis_manager.close()
     logger.info("Closed Redis connection")
 
