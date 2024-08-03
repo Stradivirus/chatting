@@ -35,6 +35,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 redis_manager = RedisManager()
 active_connections = {}
 
+# UserCountManager 인스턴스 생성
+user_count_manager = UserCountManager()
+
 message_history = {}
 banned_users = set()
 
@@ -56,8 +59,30 @@ async def broadcast_messages():
         logger.debug(f"Broadcasted and stored message: {message}")
 
 async def check_spam(client_id: str, message: str) -> bool:
-    # 기존 스팸 체크 로직 유지
-    ...
+    current_time = datetime.now()
+    
+    if client_id not in message_history:
+        message_history[client_id] = []
+    
+    if message_history[client_id] and (current_time - message_history[client_id][-1]['time']).total_seconds() < 0.5:
+        return True
+    
+    if len(message_history[client_id]) >= 2 and all(m['content'] == message for m in message_history[client_id][-2:]):
+        return True
+    
+    if len(message) > 30:
+        return True
+    
+    five_seconds_ago = current_time - timedelta(seconds=5)
+    recent_messages = [m for m in message_history[client_id] if m['time'] > five_seconds_ago]
+    if len(recent_messages) >= 8:
+        return True
+    
+    message_history[client_id].append({'content': message, 'time': current_time})
+    if len(message_history[client_id]) > 10:
+        message_history[client_id] = message_history[client_id][-10:]
+    
+    return False
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -128,10 +153,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         await broadcast_user_count(user_count)
         logger.info(f"Connection closed for client: {client_id}")
 
-async def broadcast_user_count(count):
-    message = json.dumps({"type": "user_count", "count": count})
-    for connection in active_connections.values():
-        await connection.send_text(message)
 async def broadcast_user_count(count):
     message = json.dumps({"type": "user_count", "count": count})
     for connection in active_connections.values():
