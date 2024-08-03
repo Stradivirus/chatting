@@ -82,9 +82,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         redis_manager.increment_connection_count(client_ip)
         active_connections[client_id] = websocket
         
-        # 새로 추가: 접속자 수 증가 및 브로드캐스트
-        await redis_manager.increment_active_users()
-        await redis_manager.publish_active_users()
+        # 새로 추가: 활성 사용자 추가
+        await redis_manager.add_active_user(client_id)
         
         logger.info(f"New client connected: {client_id} from IP: {client_ip}")
         
@@ -139,9 +138,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             del message_history[client_id]
         redis_manager.decrement_connection_count(client_ip)
         
-        # 새로 추가: 접속자 수 감소 및 브로드캐스트
-        await redis_manager.decrement_active_users()
-        await redis_manager.publish_active_users()
+        # 새로 추가: 활성 사용자 제거
+        await redis_manager.remove_active_user(client_id)
         
         logger.info(f"Connection closed for client: {client_id}")
 
@@ -149,7 +147,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 async def startup_event():
     try:
         await redis_manager.connect()
-        logger.info("Connected to Redis Cluster")
+        logger.info("Connected to Redis")
         asyncio.create_task(broadcast_messages())
         logger.info("Started message broadcasting task")
     except Exception as e:

@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-redis>=4.2.0
+redis
 aioredis
 asyncio
 websockets

@@ -14,18 +14,16 @@ class RedisManager:
     def __init__(self):
         self.redis_hosts = os.getenv("REDIS_HOSTS", "redis-cluster.chat.svc.cluster.local:6379").split(",")
         self.redis = None
-        self.pubsub = None
         self.blocked_ips = set()
         self.connection_counts = {}
         self.max_connections_per_ip = 3
-        self.active_users_key = "active_users"
+        self.active_users_key = "active_users"  # 새로 추가: 활성 사용자를 저장할 키
 
     async def connect(self):
         if not self.redis:
             try:
                 self.redis = await RedisCluster.from_url(f"redis://{self.redis_hosts[0]}", decode_responses=True)
                 await self.redis.ping()
-                self.pubsub = self.redis.pubsub()
                 logger.info(f"Connected to Redis Cluster at {self.redis_hosts}")
             except RedisError as e:
                 logger.error(f"Failed to connect to Redis Cluster: {e}")
@@ -53,25 +51,29 @@ class RedisManager:
 
     async def subscribe(self, channel):
         try:
-            if not self.pubsub:
+            if not self.redis:
                 await self.connect()
-            await self.pubsub.subscribe(channel)
+            pubsub = self.redis.pubsub()
+            await pubsub.subscribe(channel)
+            return pubsub
         except RedisError as e:
             logger.error(f"Error subscribing to channel: {e}")
             await self.reconnect()
-            await self.pubsub.subscribe(channel)
+            pubsub = self.redis.pubsub()
+            await pubsub.subscribe(channel)
+            return pubsub
 
     async def listen(self):
-        if not self.pubsub:
-            raise Exception("Not subscribed to any channel")
+        pubsub = await self.subscribe("chat")
         while True:
             try:
-                message = await self.pubsub.get_message(ignore_subscribe_messages=True)
+                message = await pubsub.get_message(ignore_subscribe_messages=True)
                 if message is not None:
                     yield json.loads(message['data'])
             except RedisError as e:
                 logger.error(f"Error while listening: {e}")
                 await self.reconnect()
+                pubsub = await self.subscribe("chat")
             except Exception as e:
                 logger.error(f"Unexpected error while listening: {e}")
                 await asyncio.sleep(1)
@@ -140,36 +142,39 @@ class RedisManager:
                 if self.connection_counts[ip_address] <= 0:
                     del self.connection_counts[ip_address]
 
-    async def increment_active_users(self):
+    # 새로 추가: 활성 사용자 추가
+    async def add_active_user(self, client_id):
         try:
-            return await self.redis.incr(self.active_users_key)
+            await self.redis.sadd(self.active_users_key, client_id)
+            count = await self.get_active_users_count()
+            await self.publish_active_users(count)
         except RedisError as e:
-            logger.error(f"Error incrementing active users: {e}")
+            logger.error(f"Error adding active user: {e}")
             await self.reconnect()
-            return await self.redis.incr(self.active_users_key)
 
-    async def decrement_active_users(self):
+    # 새로 추가: 활성 사용자 제거
+    async def remove_active_user(self, client_id):
         try:
-            return await self.redis.decr(self.active_users_key)
+            await self.redis.srem(self.active_users_key, client_id)
+            count = await self.get_active_users_count()
+            await self.publish_active_users(count)
         except RedisError as e:
-            logger.error(f"Error decrementing active users: {e}")
+            logger.error(f"Error removing active user: {e}")
             await self.reconnect()
-            return await self.redis.decr(self.active_users_key)
 
-    async def get_active_users(self):
+    # 새로 추가: 활성 사용자 수 조회
+    async def get_active_users_count(self):
         try:
-            count = await self.redis.get(self.active_users_key)
-            return int(count) if count else 0
+            return await self.redis.scard(self.active_users_key)
         except RedisError as e:
-            logger.error(f"Error getting active users: {e}")
+            logger.error(f"Error getting active users count: {e}")
             await self.reconnect()
-            count = await self.redis.get(self.active_users_key)
-            return int(count) if count else 0
+            return 0
 
-    async def publish_active_users(self):
-        active_users = await self.get_active_users()
+    # 새로 추가: 활성 사용자 수 발행
+    async def publish_active_users(self, count):
         message = {
             "type": "active_users",
-            "count": active_users
+            "count": count
         }
         await self.publish("active_users", json.dumps(message))
