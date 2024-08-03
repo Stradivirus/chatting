@@ -77,3 +77,25 @@ class RedisManager:
     async def close(self):
         if self.pool:
             await self.pool.disconnect()
+
+    async def check_ip(self, ip_address):
+        if ip_address in self.blocked_ips:
+            return False
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f'https://vpn-proxy-detection.com/api/check/{ip_address}') as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get('is_vpn') or data.get('is_proxy'):
+                            self.blocked_ips.add(ip_address)
+                            return False
+        except Exception as e:
+            print(f"Error checking IP {ip_address}: {e}")
+
+        return True
+
+    async def is_allowed_connection(self, ip_address):
+        if not ipaddress.ip_address(ip_address).is_global:
+            return False
+        return await self.check_ip(ip_address)
