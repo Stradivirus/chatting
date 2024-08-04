@@ -45,6 +45,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         active_connections[client_id] = websocket
         logger.info(f"New client connected: {client_id} from IP: {client_ip}")
         
+        # 최근 메시지 전송
+        recent_messages = await redis_manager.get_recent_messages("chat")
+        for msg in recent_messages:
+            await websocket.send_text(json.dumps(msg))
+        
         while True:
             try:
                 data = await websocket.receive_text()
@@ -56,8 +61,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "timestamp": datetime.now().isoformat()
                 }
 
+                # 메시지 저장 및 발행
+                await redis_manager.store_message("chat", json.dumps(message))
                 await redis_manager.publish("chat", json.dumps(message))
-                logger.debug(f"Published message to Redis: {message}")
+                logger.debug(f"Published and stored message to Redis: {message}")
             except WebSocketDisconnect:
                 logger.info(f"Client disconnected: {client_id}")
                 break
