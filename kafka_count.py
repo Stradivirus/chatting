@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 class KafkaManager:
     def __init__(self):
-        self.bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-count-svc:9092")
+        # 환경 변수에서 가져온 값을 정리하여 큰따옴표를 제거합니다.
+        self.bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-count-svc:9092").replace('"', '')
         self.producer = None
         self.consumer = None
         self.admin_client = None
