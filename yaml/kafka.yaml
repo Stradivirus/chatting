@@ -14,6 +14,18 @@ spec:
       labels:
         app: kafka
     spec:
+      initContainers:
+      - name: init
+        image: busybox
+        command: ['sh', '-c', 'echo $(echo ${POD_NAME} | awk -F"-" "{print \$NF}") > /mnt/volume/node-id']
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: node-id
+          mountPath: /mnt/volume
       containers:
       - name: kafka
         image: bitnami/kafka:latest
@@ -27,16 +39,18 @@ spec:
           value: "broker,controller"
         - name: KAFKA_CFG_NODE_ID
           valueFrom:
-            fieldRef:
-              fieldPath: metadata.annotations['statefulset.kubernetes.io/pod-name']
+            configMapKeyRef:
+              name: kafka-node-id
+              key: node-id
         - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
           value: "0@kafka-0.kafka-service.chat.svc.cluster.local:9093,1@kafka-1.kafka-service.chat.svc.cluster.local:9093,2@kafka-2.kafka-service.chat.svc.cluster.local:9093"
         - name: KAFKA_CFG_LISTENERS
           value: "PLAINTEXT://:9092,CONTROLLER://:9093"
         - name: KAFKA_CFG_ADVERTISED_LISTENERS
           valueFrom:
-            fieldRef:
-              fieldPath: metadata.annotations['statefulset.kubernetes.io/pod-name']
+            configMapKeyRef:
+              name: kafka-node-id
+              key: node-id
         - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
           value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
         - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
@@ -47,6 +61,12 @@ spec:
           value: "yes"
         - name: KAFKA_KRAFT_CLUSTER_ID
           value: "LQaaEvc3RBGAT43AUcbH7g"  # 클러스터 ID를 명시적으로 설정
+        volumeMounts:
+        - name: node-id
+          mountPath: /mnt/volume
+      volumes:
+      - name: node-id
+        emptyDir: {}
 
 ---
 apiVersion: v1
