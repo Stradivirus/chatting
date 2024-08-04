@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class KafkaManager:
     def __init__(self):
         self.bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-service:9092")
+        self.consumer_group_id = os.getenv("KAFKA_CONSUMER_GROUP_ID", "fastapi-chatting-pod")  # Consumer Group ID 설정
         self.producer = None
         self.consumer = None
         self.admin_client = None
@@ -39,7 +40,7 @@ class KafkaManager:
                 api_version="auto",
                 auto_offset_reset='latest',
                 enable_auto_commit=True,
-                group_id='chat-group',
+                group_id=self.consumer_group_id,  # Consumer Group ID 사용
                 value_deserializer=lambda x: x.decode('utf-8')
             )
             await self.consumer.start()
