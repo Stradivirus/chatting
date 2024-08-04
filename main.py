@@ -6,7 +6,7 @@ import json
 import logging
 import asyncio
 from redis_manager import RedisManager
-from chatting.kafka_count import KafkaManager
+from kafka_count import KafkaManager
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
