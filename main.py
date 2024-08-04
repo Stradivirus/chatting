@@ -27,7 +27,7 @@ async def startup_event():
         await redis_manager.connect()
         await kafka_manager.connect_producer()
         asyncio.create_task(broadcast_messages())
-        asyncio.create_task(kafka_manager.kafka_message_handler())
+        asyncio.create_task(kafka_manager.start_consuming_from_redis())
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)
         raise
@@ -73,15 +73,20 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 logger.debug(f"Received message from {client_id}: {data}")
                 
                 message = {
-                    "id": str(uuid.uuid4()),  # 고유 ID 추가
+                    "id": str(uuid.uuid4()),
                     "client_id": client_id,
                     "message": data,
                     "timestamp": datetime.now().isoformat()
                 }
 
-                # Redis에 메시지 발행
+                # Redis에 메시지 저장
+                await redis_manager.save_message(message)
+                logger.debug(f"Saved message to Redis: {message}")
+
+                # Redis에 메시지 발행 (실시간 브로드캐스트용)
                 await redis_manager.publish("chat", json.dumps(message))
                 logger.debug(f"Published message to Redis: {message}")
+
             except WebSocketDisconnect:
                 logger.info(f"Client disconnected: {client_id}")
                 break

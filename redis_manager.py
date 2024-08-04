@@ -8,23 +8,23 @@ from redis.exceptions import RedisError
 import aiohttp
 import logging
 
-# 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class RedisManager:
     def __init__(self):
-        # Redis 연결 정보 설정
         self.redis_host = os.getenv("REDIS_HOST", "redis-cluster.chat.svc.cluster.local")
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.pool = None
         self.pubsub = None
-        self.blocked_ips = set()  # 차단된 IP 주소 저장
-        self.connection_counts = {}  # IP별 연결 수 추적
-        self.max_connections_per_ip = 3  # IP당 최대 연결 수
+        self.blocked_ips = set()
+        self.connection_counts = {}
+        self.max_connections_per_ip = 3
+        self.chat_list_key = "chat_messages"
+        self.max_messages = 500
+        self.message_ttl = 7200  # 2 hours in seconds
 
     async def connect(self):
-        # Redis에 연결
         if not self.pool:
             try:
                 self.pool = ConnectionPool(
@@ -42,18 +42,44 @@ class RedisManager:
                 await self.reconnect()
 
     async def reconnect(self, max_retries=3):
-        # Redis 재연결 시도
         for attempt in range(max_retries):
             try:
-                await asyncio.sleep(2 ** attempt)  # 지수 백오프
+                await asyncio.sleep(2 ** attempt)
                 await self.connect()
                 return
             except RedisError as e:
                 logger.error(f"Reconnection attempt {attempt + 1} failed: {e}")
         raise Exception("Failed to reconnect to Redis after multiple attempts")
 
+    async def save_message(self, message):
+        try:
+            if not self.pool:
+                await self.connect()
+            
+            message_str = json.dumps(message)
+            
+            await self.redis.lpush(self.chat_list_key, message_str)
+            await self.redis.ltrim(self.chat_list_key, 0, self.max_messages - 1)
+            await self.redis.expire(self.chat_list_key, self.message_ttl)
+            
+            logger.info(f"Message saved: {message['id']}")
+        except RedisError as e:
+            logger.error(f"Error saving message: {e}")
+            await self.reconnect()
+
+    async def get_messages(self, count=100):
+        try:
+            if not self.pool:
+                await self.connect()
+            
+            messages = await self.redis.lrange(self.chat_list_key, 0, count - 1)
+            return [json.loads(msg) for msg in messages]
+        except RedisError as e:
+            logger.error(f"Error retrieving messages: {e}")
+            await self.reconnect()
+            return []
+
     async def publish(self, channel, message):
-        # 메시지 발행
         try:
             if not self.pool:
                 await self.connect()
@@ -64,7 +90,6 @@ class RedisManager:
             return await self.redis.publish(channel, message)
 
     async def subscribe(self, channel):
-        # 채널 구독
         try:
             if not self.pubsub:
                 await self.connect()
@@ -75,7 +100,6 @@ class RedisManager:
             await self.pubsub.subscribe(channel)
 
     async def listen(self):
-        # 메시지 수신
         if not self.pubsub:
             raise Exception("Not subscribed to any channel")
         while True:
@@ -91,12 +115,10 @@ class RedisManager:
                 await asyncio.sleep(1)
 
     async def close(self):
-        # Redis 연결 종료
         if self.pool:
             await self.pool.disconnect()
 
     async def check_ip(self, ip_address):
-        # IP 주소가 VPN/프록시인지 확인
         if ip_address in self.blocked_ips:
             logger.info(f"IP {ip_address} is in blocked list")
             return False
@@ -120,7 +142,6 @@ class RedisManager:
         return True
 
     async def is_allowed_connection(self, ip_address):
-        # 연결 허용 여부 확인
         try:
             ip = ipaddress.ip_address(ip_address)
             
@@ -128,7 +149,6 @@ class RedisManager:
                 logger.info(f"IP {ip_address} is private, allowing connection without restrictions")
                 return True
             
-            # 공인 IP에 대해서만 연결 수 제한 확인
             if ip.is_global:
                 if self.connection_counts.get(ip_address, 0) >= self.max_connections_per_ip:
                     logger.warning(f"IP {ip_address} has reached the maximum number of connections")
@@ -148,41 +168,12 @@ class RedisManager:
             return False
 
     def increment_connection_count(self, ip_address):
-        # 공인 IP 주소의 연결 수만 증가
         if not ipaddress.ip_address(ip_address).is_private:
             self.connection_counts[ip_address] = self.connection_counts.get(ip_address, 0) + 1
 
     def decrement_connection_count(self, ip_address):
-        # 공인 IP 주소의 연결 수만 감소
         if not ipaddress.ip_address(ip_address).is_private:
             if ip_address in self.connection_counts:
                 self.connection_counts[ip_address] -= 1
                 if self.connection_counts[ip_address] <= 0:
                     del self.connection_counts[ip_address]
-
-    async def save_message(self, uuid, message):
-        # 메시지를 Redis에 저장하고 1시간 후에 삭제되도록 설정
-        try:
-            await self.redis.setex(uuid, 3600, json.dumps(message))
-            logger.info(f"Message with UUID {uuid} saved")
-        except RedisError as e:
-            logger.error(f"Error saving message with UUID {uuid}: {e}")
-
-    async def get_message(self, uuid):
-        # Redis에서 메시지 가져오기
-        try:
-            message = await self.redis.get(uuid)
-            if message:
-                return json.loads(message)
-            return None
-        except RedisError as e:
-            logger.error(f"Error retrieving message with UUID {uuid}: {e}")
-            return None
-
-    async def delete_message(self, uuid):
-        # Redis에서 메시지 삭제
-        try:
-            await self.redis.delete(uuid)
-            logger.info(f"Message with UUID {uuid} deleted")
-        except RedisError as e:
-            logger.error(f"Error deleting message with UUID {uuid}: {e}")
