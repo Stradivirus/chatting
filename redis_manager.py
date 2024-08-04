@@ -7,6 +7,7 @@ from redis.asyncio.connection import ConnectionPool
 from redis.exceptions import RedisError
 import aiohttp
 import logging
+import time
 
 # 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -22,6 +23,8 @@ class RedisManager:
         self.blocked_ips = set()  # 차단된 IP 주소 저장
         self.connection_counts = {}  # IP별 연결 수 추적
         self.max_connections_per_ip = 3  # IP당 최대 연결 수
+        self.chat_history_key = "chat_history"  # 채팅 기록을 저장할 키
+        self.chat_history_ttl = 7200  # 채팅 기록 유지 시간 (2시간)
 
     async def connect(self):
         # Redis에 연결
@@ -53,15 +56,36 @@ class RedisManager:
         raise Exception("Failed to reconnect to Redis after multiple attempts")
 
     async def publish(self, channel, message):
-        # 메시지 발행
+        # 메시지 발행 및 채팅 기록 저장
         try:
             if not self.pool:
                 await self.connect()
-            return await self.redis.publish(channel, message)
+            await self.redis.publish(channel, message)
+            await self.add_to_chat_history(message)
+            return True
         except RedisError as e:
             logger.error(f"Error publishing message: {e}")
             await self.reconnect()
-            return await self.redis.publish(channel, message)
+            await self.redis.publish(channel, message)
+            await self.add_to_chat_history(message)
+            return True
+
+    async def add_to_chat_history(self, message):
+        # 채팅 기록에 메시지 추가
+        try:
+            timestamp = time.time()
+            await self.redis.zadd(self.chat_history_key, {message: timestamp})
+            await self.redis.zremrangebyscore(self.chat_history_key, 0, timestamp - self.chat_history_ttl)
+        except RedisError as e:
+            logger.error(f"Error adding message to chat history: {e}")
+
+    async def get_chat_history(self):
+        # 채팅 기록 조회
+        try:
+            return await self.redis.zrange(self.chat_history_key, 0, -1)
+        except RedisError as e:
+            logger.error(f"Error retrieving chat history: {e}")
+            return []
 
     async def subscribe(self, channel):
         # 채널 구독
