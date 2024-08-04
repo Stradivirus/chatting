@@ -25,11 +25,16 @@ banned_users = set()
 
 @app.on_event("startup")
 async def startup_event():
-    # 애플리케이션 시작 시 초기화 작업
-    await redis_manager.connect()
-    await kafka_manager.connect_producer()
-    asyncio.create_task(kafka_manager.manage_topics())
-    asyncio.create_task(broadcast_messages())
+    try:
+        await redis_manager.connect()
+        await kafka_manager.connect_producer()
+        asyncio.create_task(kafka_manager.manage_topics())
+        asyncio.create_task(broadcast_messages())
+    except Exception as e:
+        logger.error(f"Error during startup: {e}", exc_info=True)
+        # 여기서 애플리케이션을 종료하거나 다른 적절한 조치를 취할 수 있습니다.
+        raise
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
