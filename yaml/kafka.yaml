@@ -35,7 +35,7 @@ metadata:
   namespace: chat
 spec:
   serviceName: kafka-service
-  replicas: 5
+  replicas: 3
   selector:
     matchLabels:
       app: kafka
@@ -78,8 +78,6 @@ spec:
         - name: ALLOW_PLAINTEXT_LISTENER
           value: "yes"
         volumeMounts:
-        - name: data
-          mountPath: /bitnami/kafka
         - name: config
           mountPath: /opt/bitnami/kafka/config/server.properties
           subPath: server.properties
@@ -87,14 +85,6 @@ spec:
       - name: config
         configMap:
           name: kafka-config
-  volumeClaimTemplates:
-  - metadata:
-      name: data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        requests:
-          storage: 8Gi
 
 ---
 apiVersion: v1
