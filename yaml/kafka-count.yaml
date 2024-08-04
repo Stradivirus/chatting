@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kafka-count
+  namespace: chat
+  labels:
+    app: kafka-count
+spec:
+  containers:
+  - name: kafka
+    image: bitnami/kafka:latest
+    ports:
+    - containerPort: 9092
+      name: kafka
+    env:
+    - name: KAFKA_CFG_BROKER_ID
+      value: "0"
+    - name: KAFKA_CFG_LISTENERS
+      value: "PLAINTEXT://:9092"
+    - name: KAFKA_CFG_ADVERTISED_LISTENERS
+      value: "PLAINTEXT://kafka-count.chat.svc.cluster.local:9092"
+    - name: KAFKA_CFG_LOG_DIRS
+      value: "/bitnami/kafka/data"
+    - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+      value: "true"
+    - name: KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR
+      value: "1"
+    - name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+      value: "1"
+    - name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR
+      value: "1"
+    resources:
+      limits:
+        memory: "2Gi"
+        cpu: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-count-svc
+  namespace: chat
+spec:
+  ports:
+  - port: 9092
+    name: kafka
+  selector:
+    app: kafka-count

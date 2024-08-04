@@ -6,9 +6,7 @@ import json
 import logging
 import asyncio
 from redis_manager import RedisManager
-from kafka_manager import KafkaManager
-
-
+from chatting.kafka_count import KafkaManager
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -68,7 +66,6 @@ async def check_spam(client_id: str, message: str) -> bool:
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     client_ip = websocket.client.host
     
-    # 연결 허용 여부 확인을 연결 수락 전으로 이동
     if not await redis_manager.is_allowed_connection(client_ip):
         await websocket.close(code=1008, reason="Connection not allowed")
         return
@@ -78,6 +75,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         redis_manager.increment_connection_count(client_ip)
         active_connections[client_id] = websocket
         logger.info(f"New client connected: {client_id} from IP: {client_ip}")
+        
+        # Update Kafka connection count
+        await kafka_manager.update_connection_count(1)
         
         while True:
             try:
@@ -110,8 +110,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 }
 
                 await redis_manager.publish("chat", json.dumps(message))
-                await kafka_manager.send_message("chat_topic", message)  # Kafka로 메시지 전송
-                logger.debug(f"Published message to Redis and Kafka: {message}")
+                logger.debug(f"Published message to Redis: {message}")
             except WebSocketDisconnect:
                 logger.info(f"Client disconnected: {client_id}")
                 break
@@ -122,16 +121,22 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 break
             except Exception as e:
                 logger.error(f"Error processing message from {client_id}: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error in websocket connection: {str(e)}")
     finally:
         if client_id in active_connections:
             del active_connections[client_id]
         if client_id in message_history:
             del message_history[client_id]
         redis_manager.decrement_connection_count(client_ip)
+        # Update Kafka connection count
+        await kafka_manager.update_connection_count(-1)
         logger.info(f"Connection closed for client: {client_id}")
 
+async def broadcast_connection_count(count):
+    count_message = json.dumps({"type": "connection_count", "count": count})
+    await asyncio.gather(
+        *[connection.send_text(count_message) for connection in active_connections.values()],
+        return_exceptions=True
+    )
 
 @app.on_event("startup")
 async def startup_event():
@@ -140,20 +145,22 @@ async def startup_event():
         logger.info("Connected to Redis")
         await kafka_manager.connect()
         logger.info("Connected to Kafka")
+        # Kafka 토픽 생성 (없는 경우)
+        await kafka_manager.create_topic("connection_count")
         asyncio.create_task(broadcast_messages())
-        asyncio.create_task(consume_kafka_messages())
-        logger.info("Started message broadcasting and Kafka consuming tasks")
+        asyncio.create_task(kafka_manager.consume_count_updates(broadcast_connection_count))
+        await kafka_manager.start_count_updates()
+        logger.info("Started message broadcasting and Kafka count updates")
     except Exception as e:
         logger.error(f"Failed to start up properly: {e}", exc_info=True)
         raise
 
-
 @app.on_event("shutdown")
 async def shutdown_event():
     await redis_manager.close()
+    kafka_manager.stop_count_updates()
     await kafka_manager.disconnect()
     logger.info("Closed Redis and Kafka connections")
-
 
 if __name__ == "__main__":
     import uvicorn

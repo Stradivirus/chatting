@@ -1,6 +1,7 @@
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
+const connectionCountDisplay = document.getElementById('connection-count');
 
 const clientId = Date.now().toString();
 let ws;
@@ -16,6 +17,7 @@ let banTimer = null;
 let banCountdown = 0;
 let messageCountTimer = null;
 
+// WebSocket 연결 함수
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProtocol}//${window.location.host}/ws/${clientId}`;
@@ -29,11 +31,14 @@ function connectWebSocket() {
         reconnectAttempts = 0;
     };
 
+    // 서버로부터 메시지 수신 처리
     ws.onmessage = function(event) {
         console.log("Received message:", event.data);
         const message = JSON.parse(event.data);
         if (message.type === 'warning') {
             displayWarning(message.message);
+        } else if (message.type === 'connection_count') {
+            updateConnectionCount(message.count);
         } else {
             displayMessage(message);
         }
@@ -51,6 +56,7 @@ function connectWebSocket() {
     };
 }
 
+// 재연결 함수
 function reconnectWithBackoff() {
     if (reconnectAttempts >= maxReconnectAttempts) {
         console.log("Max reconnection attempts reached. Please refresh the page.");
@@ -74,6 +80,7 @@ messageInput.onkeypress = function(e) {
     }
 };
 
+// 메시지 전송 함수
 function sendMessage() {
     const message = messageInput.value.trim();
     if (message && ws && ws.readyState === WebSocket.OPEN) {
@@ -88,6 +95,7 @@ function sendMessage() {
     }
 }
 
+// 메시지 전송 가능 여부 확인 함수
 function canSendMessage(message) {
     const currentTime = Date.now();
 
@@ -120,6 +128,7 @@ function canSendMessage(message) {
     return true;
 }
 
+// 메시지 카운트 업데이트 함수
 function updateMessageCount() {
     messageCount++;
     if (messageCount === 1) {
@@ -134,6 +143,7 @@ function updateMessageCount() {
     }
 }
 
+// 사용자 밴 함수
 function banUser(reason) {
     isBanned = true;
     banCountdown = 30;
@@ -153,6 +163,7 @@ function banUser(reason) {
     }, 1000);
 }
 
+// 밴 경고 메시지 업데이트 함수
 function updateBanWarning() {
     const warningElement = document.querySelector('.warning-message');
     if (warningElement) {
@@ -160,6 +171,7 @@ function updateBanWarning() {
     }
 }
 
+// 메시지 표시 함수
 function displayMessage(message) {
     console.log("Displaying message:", message);
     const messageElement = document.createElement('div');
@@ -176,6 +188,7 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// 경고 메시지 표시 함수
 function displayWarning(warningMessage) {
     removeWarning(); // 기존 경고 메시지 제거
     const warningElement = document.createElement('div');
@@ -185,11 +198,17 @@ function displayWarning(warningMessage) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// 경고 메시지 제거 함수
 function removeWarning() {
     const existingWarning = document.querySelector('.warning-message');
     if (existingWarning) {
         existingWarning.remove();
     }
+}
+
+// 연결 수 업데이트 함수
+function updateConnectionCount(count) {
+    connectionCountDisplay.textContent = `현재 접속자 수: ${count}`;
 }
 
 // DOM이 완전히 로드된 후 실행
