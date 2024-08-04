@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class KafkaManager:
     def __init__(self):
         self.bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-service:9092")
-        self.consumer_group_id = os.getenv("KAFKA_CONSUMER_GROUP_ID", "fastapi-chatting-pod")  # Consumer Group ID 설정
+        self.consumer_group_id = os.getenv("KAFKA_CONSUMER_GROUP_ID", "fastapi-chatting-pod")
         self.producer = None
         self.consumer = None
         self.admin_client = None
@@ -26,8 +26,8 @@ class KafkaManager:
                 bootstrap_servers=self.bootstrap_servers,
                 api_version="auto",
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-                enable_idempotence=True,  # 멱등성 활성화
-                acks='all',               # 모든 복제본에 메시지가 기록될 때까지 기다림            
+                enable_idempotence=True,
+                acks='all',
             )
             await self.producer.start()
             logger.info(f"Kafka producer connected to {self.bootstrap_servers}")
@@ -35,19 +35,18 @@ class KafkaManager:
             logger.error(f"Failed to connect Kafka producer: {e}")
             raise
 
-
     async def connect_consumer(self, topics):
         try:
             self.consumer = AIOKafkaConsumer(
+                *topics,
                 bootstrap_servers=self.bootstrap_servers,
                 api_version="auto",
                 auto_offset_reset='latest',
                 enable_auto_commit=True,
-                group_id=self.consumer_group_id,  # Consumer Group ID 사용
-                value_deserializer=lambda x: x.decode('utf-8')
+                group_id=self.consumer_group_id,
+                value_deserializer=lambda x: json.loads(x.decode('utf-8'))
             )
             await self.consumer.start()
-            await self.consumer.subscribe(topics)
             logger.info(f"Kafka consumer connected to {self.bootstrap_servers} and subscribed to topics {topics}")
         except KafkaError as e:
             logger.error(f"Failed to connect Kafka consumer: {e}")
@@ -107,9 +106,8 @@ class KafkaManager:
         
         try:
             async for message in self.consumer:
-                # 메시지 처리 로직
                 logger.info(f"Received message: {message.value}")
-                # 여기에 메시지 처리 로직을 추가하세요
+                # 메시지 처리 로직 추가
         except KafkaError as e:
             logger.error(f"Error consuming messages from Kafka: {e}")
             raise
@@ -120,7 +118,7 @@ class KafkaManager:
                 await self.consume_messages()
             except Exception as e:
                 logger.error(f"Error in consume_messages: {e}")
-            await asyncio.sleep(60)  # 1분 대기 후 다시 시도
+            await asyncio.sleep(60)
 
     async def delete_old_topics(self):
         if not self.admin_client:
@@ -163,7 +161,7 @@ class KafkaManager:
             except Exception as e:
                 logger.error(f"Error in topic management cycle: {e}", exc_info=True)
             finally:
-                await asyncio.sleep(300)  # 5분마다 실행
+                await asyncio.sleep(300)
     
     async def kafka_message_handler(self):
         while True:

@@ -9,12 +9,14 @@ from kafka_manager import KafkaManager
 from redis_manager import RedisManager
 import uuid
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname=s - %(message)s')
+# 로깅 설정
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Redis와 Kafka 매니저 인스턴스 생성
 redis_manager = RedisManager()
 kafka_manager = KafkaManager()
 active_connections = {}
@@ -26,8 +28,6 @@ async def startup_event():
         await kafka_manager.connect_producer()
         asyncio.create_task(broadcast_messages())
         asyncio.create_task(kafka_manager.kafka_message_handler())
-        logger.info("Starting consume_messages task")
-        asyncio.create_task(kafka_manager.start_consuming())  # 수정된 부분
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)
         raise
@@ -43,6 +43,7 @@ async def get():
         content = file.read()
     return HTMLResponse(content)
 
+# Redis에서 메시지를 구독하고 WebSocket을 통해 브로드캐스트
 async def broadcast_messages():
     await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
@@ -50,8 +51,7 @@ async def broadcast_messages():
             *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
             return_exceptions=True
         )
-        await kafka_manager.add_to_message_queue(message)
-        logger.debug(f"Broadcasted message and added to Kafka queue: {message}")
+        logger.debug(f"Broadcasted message: {message}")
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -79,6 +79,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "timestamp": datetime.now().isoformat()
                 }
 
+                # Redis에 메시지 발행
                 await redis_manager.publish("chat", json.dumps(message))
                 logger.debug(f"Published message to Redis: {message}")
             except WebSocketDisconnect:

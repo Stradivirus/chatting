@@ -159,3 +159,12 @@ class RedisManager:
                 self.connection_counts[ip_address] -= 1
                 if self.connection_counts[ip_address] <= 0:
                     del self.connection_counts[ip_address]
+
+    async def is_message_duplicate(self, message_id):
+        # Redis에서 메시지 ID가 존재하는지 확인
+        exists = await self.redis.exists(message_id)
+        if exists:
+            return True
+        else:
+            await self.redis.setex(message_id, 60, "1")  # 메시지 ID를 60초 동안 유지
+            return False
