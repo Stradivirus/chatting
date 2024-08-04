@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from datetime import datetime, timedelta
@@ -8,12 +8,14 @@ import asyncio
 from kafka_manager import KafkaManager
 from redis_manager import RedisManager
 
+# 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Redis와 Kafka 매니저 초기화
 redis_manager = RedisManager()
 kafka_manager = KafkaManager()
 active_connections = {}
@@ -23,6 +25,7 @@ banned_users = set()
 
 @app.on_event("startup")
 async def startup_event():
+    # 애플리케이션 시작 시 초기화 작업
     await redis_manager.connect()
     await kafka_manager.connect_producer()
     asyncio.create_task(kafka_manager.manage_topics())
@@ -30,16 +33,19 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    # 애플리케이션 종료 시 정리 작업
     await redis_manager.close()
-    kafka_manager.close()
+    await kafka_manager.close()
 
 @app.get("/")
 async def get():
+    # 메인 페이지 HTML 반환
     with open("static/index.html", "r") as file:
         content = file.read()
     return HTMLResponse(content)
 
 async def broadcast_messages():
+    # Redis를 통해 메시지를 브로드캐스트하고 Kafka에 저장
     await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
         await asyncio.gather(
@@ -50,6 +56,7 @@ async def broadcast_messages():
         logger.debug(f"Broadcasted and stored message: {message}")
 
 async def check_spam(client_id: str, message: str) -> bool:
+    # 스팸 메시지 체크
     current_time = datetime.now()
     
     if client_id not in message_history:
@@ -77,6 +84,7 @@ async def check_spam(client_id: str, message: str) -> bool:
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    # WebSocket 연결 처리
     client_ip = websocket.client.host
     
     if not await redis_manager.is_allowed_connection(client_ip):
