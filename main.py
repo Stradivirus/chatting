@@ -8,7 +8,7 @@ import asyncio
 from kafka_manager import KafkaManager
 from redis_manager import RedisManager
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname=s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
@@ -25,6 +25,8 @@ async def startup_event():
         await kafka_manager.connect_producer()
         asyncio.create_task(broadcast_messages())
         asyncio.create_task(kafka_manager.kafka_message_handler())
+        logger.info("Starting consume_messages task")  # 추가된 로깅
+        asyncio.create_task(kafka_manager.consume_messages())  # 메시지 소비 시작
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)
         raise
