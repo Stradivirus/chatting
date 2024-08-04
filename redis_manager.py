@@ -21,7 +21,6 @@ class RedisManager:
         self.connection_counts = {}
         self.max_connections_per_ip = 3
         self.chat_list_key = "chat_messages"
-        self.last_processed_id_key = "last_processed_id"
         self.message_ttl = 7200  # 2 hours in seconds
 
     async def connect(self):
@@ -32,7 +31,6 @@ class RedisManager:
                     decode_responses=True
                 )
                 await self.redis.ping()
-                self.pubsub = self.redis.pubsub()
                 logger.info(f"Connected to Redis Cluster at {self.redis_host}:{self.redis_port}")
             except RedisError as e:
                 logger.error(f"Failed to connect to Redis Cluster: {e}")
@@ -67,30 +65,18 @@ class RedisManager:
             logger.error(f"Error saving message: {e}")
             await self.reconnect()
 
-    async def get_new_messages(self):
+    async def get_messages(self, count=100):
         try:
             if not self.redis:
                 await self.connect()
             
-            last_processed_id = await self.redis.get(self.last_processed_id_key) or "0"
             current_time = datetime.now().timestamp()
             two_hours_ago = (datetime.now() - timedelta(hours=2)).timestamp()
 
-            messages = await self.redis.zrangebyscore(self.chat_list_key, two_hours_ago, current_time, withscores=True)
-            new_messages = []
-
-            for message_str, timestamp in messages:
-                message = json.loads(message_str)
-                if message['id'] > last_processed_id:
-                    new_messages.append(message)
-                    last_processed_id = message['id']
-
-            if new_messages:
-                await self.redis.set(self.last_processed_id_key, last_processed_id)
-
-            return new_messages
+            messages = await self.redis.zrevrangebyscore(self.chat_list_key, current_time, two_hours_ago, start=0, num=count)
+            return [json.loads(msg) for msg in messages]
         except RedisError as e:
-            logger.error(f"Error retrieving new messages: {e}")
+            logger.error(f"Error retrieving messages: {e}")
             await self.reconnect()
             return []
 
@@ -106,12 +92,14 @@ class RedisManager:
 
     async def subscribe(self, channel):
         try:
-            if not self.pubsub:
+            if not self.redis:
                 await self.connect()
+            self.pubsub = self.redis.pubsub()
             await self.pubsub.subscribe(channel)
         except RedisError as e:
             logger.error(f"Error subscribing to channel: {e}")
             await self.reconnect()
+            self.pubsub = self.redis.pubsub()
             await self.pubsub.subscribe(channel)
 
     async def listen(self):
@@ -130,10 +118,10 @@ class RedisManager:
                 await asyncio.sleep(1)
 
     async def close(self):
+        if self.pubsub:
+            await self.pubsub.close()
         if self.redis:
             await self.redis.close()
-
-    # ... (나머지 메서드들은 그대로 유지)
 
     async def is_allowed_connection(self, ip_address):
         try:

@@ -6,7 +6,6 @@ resources:
 - fastapi.yaml
 - redis.yaml
 - ingress.yaml
-- kafka.yaml
 
 # 이미지 업데이트 설정
 images:

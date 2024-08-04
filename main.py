@@ -6,7 +6,6 @@ import json
 import logging
 import asyncio
 from redis_manager import RedisManager
-from kafka_manager import KafkaManager
 import uuid
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -16,16 +15,14 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 redis_manager = RedisManager()
-kafka_manager = KafkaManager()
 active_connections = {}
 
 @app.on_event("startup")
 async def startup_event():
     try:
         await redis_manager.connect()
-        await kafka_manager.connect_producer()
+        await redis_manager.subscribe("chat")
         asyncio.create_task(broadcast_messages())
-        asyncio.create_task(kafka_manager.start_consuming_from_redis())
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)
         raise
@@ -33,7 +30,6 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     await redis_manager.close()
-    await kafka_manager.close()
 
 @app.get("/")
 async def get():
@@ -42,7 +38,6 @@ async def get():
     return HTMLResponse(content)
 
 async def broadcast_messages():
-    await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
         await asyncio.gather(
             *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
@@ -76,13 +71,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "timestamp": datetime.now().timestamp()
                 }
 
-                # 즉시 브로드캐스팅
-                await asyncio.gather(
-                    *[conn.send_text(json.dumps(message)) for conn in active_connections.values()],
-                    return_exceptions=True
-                )
-
-                # Redis에 메시지 저장
+                # Redis에 메시지 저장 및 발행
                 await redis_manager.save_message(message)
 
             except WebSocketDisconnect:
@@ -105,8 +94,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
 @app.get("/messages")
 async def get_recent_messages(count: int = 100):
-    messages = await redis_manager.get_new_messages()
-    return {"messages": messages[:count]}
+    messages = await redis_manager.get_messages(count)
+    return {"messages": messages}
 
 if __name__ == "__main__":
     import uvicorn
