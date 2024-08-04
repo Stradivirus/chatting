@@ -42,6 +42,7 @@ class KafkaManager:
                 enable_auto_commit=True,
                 group_id=self.consumer_group_id,  # Consumer Group ID 사용
                 value_deserializer=lambda x: x.decode('utf-8')
+                enable_idempotence=True,  
             )
             await self.consumer.start()
             await self.consumer.subscribe(topics)
