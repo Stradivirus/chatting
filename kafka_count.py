@@ -1,7 +1,8 @@
-import asyncio
 import os
+from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+from aiokafka.admin import AIOKafkaAdminClient, NewTopic
+import asyncio
 import json
-from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -12,59 +13,93 @@ class KafkaManager:
         self.bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-count-svc:9092").replace('"', '')
         self.producer = None
         self.consumer = None
+        self.admin_client = None
         self.connection_count = 0
         self.update_task = None
-        
+
     async def connect(self):
-        self.producer = AIOKafkaProducer(bootstrap_servers=self.bootstrap_servers)
-        await self.producer.start()
-        self.consumer = AIOKafkaConsumer("connection_count", bootstrap_servers=self.bootstrap_servers)
-        await self.consumer.start()
-        logger.info("Connected to Kafka")
+        try:
+            self.producer = AIOKafkaProducer(bootstrap_servers=self.bootstrap_servers)
+            await self.producer.start()
+            self.admin_client = AIOKafkaAdminClient(bootstrap_servers=self.bootstrap_servers)
+            await self.admin_client.start()
+            logger.info("Connected to Kafka producer and admin client")
+        except Exception as e:
+            logger.error(f"Failed to connect to Kafka: {e}")
+            raise
 
     async def disconnect(self):
         if self.producer:
             await self.producer.stop()
         if self.consumer:
             await self.consumer.stop()
+        if self.admin_client:
+            await self.admin_client.close()
         if self.update_task:
             self.update_task.cancel()
 
     async def send_count_update(self):
         try:
-            await self.producer.send_and_wait("connection_count", json.dumps({"count": self.connection_count}).encode('utf-8'))
+            await self.producer.send_and_wait("connection_count", json.dumps({
+                "count": self.connection_count
+            }).encode('utf-8'))
         except Exception as e:
             logger.error(f"Failed to send count update to Kafka: {e}")
+            raise
 
-    async def update_connection_count(self):
+    async def consume_count_updates(self, callback):
+        self.consumer = AIOKafkaConsumer("connection_count", bootstrap_servers=self.bootstrap_servers)
+        await self.consumer.start()
+        try:
+            async for msg in self.consumer:
+                await callback(json.loads(msg.value.decode('utf-8')))
+                await self.consumer.commit()  # 오프셋 커밋 추가
+        finally:
+            await self.consumer.stop()
+
+    async def create_topic(self, topic_name, num_partitions=1, replication_factor=1):
+        try:
+            topics = await self.admin_client.list_topics()
+            if topic_name not in topics:
+                new_topic = NewTopic(
+                    name=topic_name,
+                    num_partitions=num_partitions,
+                    replication_factor=replication_factor
+                )
+                await self.admin_client.create_topics([new_topic])
+                logger.info(f"Created Kafka topic: {topic_name}")
+            else:
+                logger.info(f"Kafka topic already exists: {topic_name}")
+        except Exception as e:
+            logger.error(f"Failed to create Kafka topic: {e}")
+            raise
+
+    async def update_connection_count(self, change):
+        self.connection_count += change
+        await self.send_count_update()
+
+    async def periodic_count_update(self):
         while True:
             await asyncio.sleep(1)  # 1초 대기
-            # 여기서 실제 접속자 수를 계산하는 로직을 추가할 수 있습니다.
-            # 예를 들어, 웹소켓 연결 수를 세는 등의 방법으로 실제 접속자 수를 파악할 수 있습니다.
-            # 현재는 예시를 위해 랜덤하게 변경하도록 하겠습니다.
-            self.connection_count = max(0, self.connection_count + random.randint(-1, 1))
             await self.send_count_update()
-            logger.info(f'Updated connection count: {self.connection_count}')
 
-    async def start_updates(self):
-        self.update_task = asyncio.create_task(self.update_connection_count())
+    async def start_count_updates(self):
+        self.update_task = asyncio.create_task(self.periodic_count_update())
 
-    async def consume_updates(self):
-        async for msg in self.consumer:
-            data = json.loads(msg.value.decode('utf-8'))
-            self.connection_count = data['count']
-            logger.info(f'Received connection count update: {self.connection_count}')
+    def stop_count_updates(self):
+        if self.update_task:
+            self.update_task.cancel()
 
 async def main():
-    manager = KafkaManager()
-    await manager.connect()
-    try:
-        await asyncio.gather(
-            manager.start_updates(),
-            manager.consume_updates()
-        )
-    finally:
-        await manager.disconnect()
+    kafka_manager = KafkaManager()
+    await kafka_manager.connect()
+    await kafka_manager.create_topic("connection_count")
+    await kafka_manager.start_count_updates()
+
+    async def handle_update(data):
+        print(f"Received update: {data}")
+
+    await kafka_manager.consume_count_updates(handle_update)
 
 if __name__ == "__main__":
     asyncio.run(main())
