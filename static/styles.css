@@ -17,6 +17,14 @@ body {
     box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
 }
 
+.connection-count {
+    padding: 10px;
+    background-color: #007bff;
+    color: white;
+    text-align: center;
+    font-weight: bold;
+}
+
 .chat-messages {
     flex-grow: 1;
     overflow-y: auto;
