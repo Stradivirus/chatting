@@ -25,6 +25,11 @@ async def get():
         content = file.read()
     return HTMLResponse(content)
 
+# 현재 접속자 수를 반환하는 엔드포인트 추가
+@app.get("/connections")
+async def get_connections():
+    return {"connections": len(active_connections)}
+
 async def broadcast_messages():
     await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
@@ -63,8 +68,7 @@ async def check_spam(client_id: str, message: str) -> bool:
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     client_ip = websocket.client.host
-    
-    # 연결 허용 여부 확인을 연결 수락 전으로 이동
+
     if not await redis_manager.is_allowed_connection(client_ip):
         await websocket.close(code=1008, reason="Connection not allowed")
         return

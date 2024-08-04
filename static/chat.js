@@ -27,6 +27,7 @@ function connectWebSocket() {
         sendButton.disabled = false;
         messageInput.disabled = false;
         reconnectAttempts = 0;
+        updateConnectionCount(); // WebSocket 연결 시 접속자 수 업데이트
     };
 
     ws.onmessage = function(event) {
@@ -44,6 +45,7 @@ function connectWebSocket() {
         sendButton.disabled = true;
         messageInput.disabled = true;
         reconnectWithBackoff();
+        updateConnectionCount(); // WebSocket 연결 해제 시 접속자 수 업데이트
     };
 
     ws.onerror = function(error) {
@@ -192,7 +194,16 @@ function removeWarning() {
     }
 }
 
+// 접속자 수를 업데이트하는 함수 추가
+async function updateConnectionCount() {
+    const response = await fetch('/connections');
+    const data = await response.json();
+    document.getElementById('connection-count').textContent = `접속자 수: ${data.connections}`;
+}
+
 // DOM이 완전히 로드된 후 실행
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket();
+    updateConnectionCount(); // 페이지 로드 시 접속자 수 업데이트
+    setInterval(updateConnectionCount, 5000); // 5초마다 접속자 수 업데이트
 });
