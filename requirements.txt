@@ -6,3 +6,4 @@ asyncio
 websockets
 aiohttp
 aiokafka
+kafka-python
