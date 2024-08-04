@@ -7,6 +7,7 @@ from redis.asyncio.connection import ConnectionPool
 from redis.exceptions import RedisError
 import aiohttp
 import logging
+from datetime import datetime, timedelta
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ class RedisManager:
         self.connection_counts = {}
         self.max_connections_per_ip = 3
         self.chat_list_key = "chat_messages"
-        self.max_messages = 500
+        self.last_processed_id_key = "last_processed_id"
         self.message_ttl = 7200  # 2 hours in seconds
 
     async def connect(self):
@@ -58,24 +59,42 @@ class RedisManager:
             
             message_str = json.dumps(message)
             
-            await self.redis.lpush(self.chat_list_key, message_str)
-            await self.redis.ltrim(self.chat_list_key, 0, self.max_messages - 1)
-            await self.redis.expire(self.chat_list_key, self.message_ttl)
+            # 파이프라인을 사용하여 여러 작업을 한 번에 실행
+            async with self.redis.pipeline(transaction=True) as pipe:
+                await pipe.zadd(self.chat_list_key, {message_str: message['timestamp']})
+                await pipe.expire(self.chat_list_key, self.message_ttl)
+                await pipe.publish("chat", message_str)
+                await pipe.execute()
             
             logger.info(f"Message saved: {message['id']}")
         except RedisError as e:
             logger.error(f"Error saving message: {e}")
             await self.reconnect()
 
-    async def get_messages(self, count=100):
+    async def get_new_messages(self):
         try:
             if not self.pool:
                 await self.connect()
             
-            messages = await self.redis.lrange(self.chat_list_key, 0, count - 1)
-            return [json.loads(msg) for msg in messages]
+            last_processed_id = await self.redis.get(self.last_processed_id_key) or "0"
+            current_time = datetime.now().timestamp()
+            two_hours_ago = (datetime.now() - timedelta(hours=2)).timestamp()
+
+            messages = await self.redis.zrangebyscore(self.chat_list_key, two_hours_ago, current_time, withscores=True)
+            new_messages = []
+
+            for message_str, timestamp in messages:
+                message = json.loads(message_str)
+                if message['id'] > last_processed_id:
+                    new_messages.append(message)
+                    last_processed_id = message['id']
+
+            if new_messages:
+                await self.redis.set(self.last_processed_id_key, last_processed_id)
+
+            return new_messages
         except RedisError as e:
-            logger.error(f"Error retrieving messages: {e}")
+            logger.error(f"Error retrieving new messages: {e}")
             await self.reconnect()
             return []
 
@@ -118,29 +137,6 @@ class RedisManager:
         if self.pool:
             await self.pool.disconnect()
 
-    async def check_ip(self, ip_address):
-        if ip_address in self.blocked_ips:
-            logger.info(f"IP {ip_address} is in blocked list")
-            return False
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f'https://vpn-proxy-detection.com/api/check/{ip_address}') as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if data.get('is_vpn') or data.get('is_proxy'):
-                            logger.warning(f"IP {ip_address} detected as VPN/Proxy")
-                            self.blocked_ips.add(ip_address)
-                            return False
-                        else:
-                            logger.info(f"IP {ip_address} is not a VPN/Proxy")
-                    else:
-                        logger.error(f"Error response from VPN/Proxy detection service: {response.status}")
-        except Exception as e:
-            logger.error(f"Error checking IP {ip_address}: {e}")
-        
-        return True
-
     async def is_allowed_connection(self, ip_address):
         try:
             ip = ipaddress.ip_address(ip_address)
@@ -166,6 +162,29 @@ class RedisManager:
         except ValueError:
             logger.error(f"Invalid IP address: {ip_address}")
             return False
+
+    async def check_ip(self, ip_address):
+        if ip_address in self.blocked_ips:
+            logger.info(f"IP {ip_address} is in blocked list")
+            return False
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f'https://vpn-proxy-detection.com/api/check/{ip_address}') as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get('is_vpn') or data.get('is_proxy'):
+                            logger.warning(f"IP {ip_address} detected as VPN/Proxy")
+                            self.blocked_ips.add(ip_address)
+                            return False
+                        else:
+                            logger.info(f"IP {ip_address} is not a VPN/Proxy")
+                    else:
+                        logger.error(f"Error response from VPN/Proxy detection service: {response.status}")
+        except Exception as e:
+            logger.error(f"Error checking IP {ip_address}: {e}")
+        
+        return True
 
     def increment_connection_count(self, ip_address):
         if not ipaddress.ip_address(ip_address).is_private:

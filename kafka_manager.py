@@ -1,10 +1,12 @@
 import os
 import json
 import asyncio
-from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+from aiokafka import AIOKafkaProducer, AIOKafkaConsumer, AIOKafkaAdminClient
 from aiokafka.errors import KafkaError
+from aiokafka.admin import NewTopic
 import logging
 from redis_manager import RedisManager
+from datetime import datetime, timedelta
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -14,11 +16,12 @@ class KafkaManager:
         self.bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-service:9092")
         self.consumer_group_id = os.getenv("KAFKA_CONSUMER_GROUP_ID", "fastapi-chatting-pod")
         self.producer = None
-        self.consumer = None
+        self.admin_client = None
         self.topic_prefix = "chat-messages-"
-        self.message_queue = asyncio.Queue()
         self.redis_manager = RedisManager()
         self.polling_interval = 1  # 1 second
+        self.topic_creation_interval = 60  # 1 minute
+        self.topic_retention_time = 300  # 5 minutes
 
     async def connect_producer(self):
         try:
@@ -34,21 +37,40 @@ class KafkaManager:
             logger.error(f"Failed to connect Kafka producer: {e}")
             raise
 
-    async def connect_consumer(self, topic):
+    async def connect_admin(self):
         try:
-            self.consumer = AIOKafkaConsumer(
-                topic,
-                bootstrap_servers=self.bootstrap_servers,
-                auto_offset_reset='latest',
-                enable_auto_commit=True,
-                group_id=self.consumer_group_id,
-                value_deserializer=lambda x: json.loads(x.decode('utf-8'))
-            )
-            await self.consumer.start()
-            logger.info(f"Kafka consumer connected to {self.bootstrap_servers} and subscribed to topic {topic}")
+            self.admin_client = AIOKafkaAdminClient(bootstrap_servers=self.bootstrap_servers)
+            await self.admin_client.start()
+            logger.info(f"Kafka admin client connected to {self.bootstrap_servers}")
         except KafkaError as e:
-            logger.error(f"Failed to connect Kafka consumer: {e}")
+            logger.error(f"Failed to connect Kafka admin client: {e}")
             raise
+
+    async def create_topic(self):
+        topic_name = self.get_topic_name()
+        try:
+            new_topic = NewTopic(
+                name=topic_name,
+                num_partitions=1,
+                replication_factor=1
+            )
+            await self.admin_client.create_topics([new_topic])
+            logger.info(f"Created new topic: {topic_name}")
+        except KafkaError as e:
+            logger.error(f"Failed to create topic {topic_name}: {e}")
+
+    async def delete_old_topics(self):
+        try:
+            topics = await self.admin_client.list_topics()
+            current_time = datetime.now()
+            for topic in topics:
+                if topic.startswith(self.topic_prefix):
+                    topic_time = datetime.strptime(topic[len(self.topic_prefix):], '%Y-%m-%d-%H-%M')
+                    if (current_time - topic_time).total_seconds() > self.topic_retention_time:
+                        await self.admin_client.delete_topics([topic])
+                        logger.info(f"Deleted old topic: {topic}")
+        except KafkaError as e:
+            logger.error(f"Failed to delete old topics: {e}")
 
     async def produce_message(self, message):
         if not self.producer:
@@ -61,24 +83,22 @@ class KafkaManager:
             logger.info(f"Successfully sent message to topic {topic_name}")
         except KafkaError as e:
             logger.error(f"Failed to send message to Kafka: {e}", exc_info=True)
-            await self.message_queue.put(message)  # 실패한 메시지를 큐에 추가
-
-    async def consume_messages(self, topic):
-        if not self.consumer:
-            await self.connect_consumer(topic)
-
-        try:
-            async for message in self.consumer:
-                logger.info(f"Received message: {message.value}")
-                # 메시지 처리 로직 추가 (필요한 경우)
-        except KafkaError as e:
-            logger.error(f"Error consuming messages from Kafka: {e}")
-            raise
 
     async def start_consuming_from_redis(self):
+        if not self.admin_client:
+            await self.connect_admin()
+
+        last_topic_creation_time = datetime.now()
+
         while True:
             try:
-                messages = await self.redis_manager.get_messages(100)  # 최대 100개의 메시지를 가져옴
+                current_time = datetime.now()
+                if (current_time - last_topic_creation_time).total_seconds() >= self.topic_creation_interval:
+                    await self.create_topic()
+                    await self.delete_old_topics()
+                    last_topic_creation_time = current_time
+
+                messages = await self.redis_manager.get_new_messages()  # 새로운 메시지만 가져옴
                 for message in messages:
                     await self.produce_message(message)
                 await asyncio.sleep(self.polling_interval)
@@ -86,24 +106,13 @@ class KafkaManager:
                 logger.error(f"Error in consuming messages from Redis: {e}")
                 await asyncio.sleep(self.polling_interval)
 
-    async def kafka_message_handler(self):
-        while True:
-            try:
-                message = await self.message_queue.get()
-                await self.produce_message(message)
-            except Exception as e:
-                logger.error(f"Error handling Kafka message: {e}")
-                await self.message_queue.put(message)  # 실패한 메시지를 다시 큐에 추가
-            await asyncio.sleep(0.1)
-
     def get_topic_name(self):
-        from datetime import datetime
         date = datetime.now()
         return f"{self.topic_prefix}{date.strftime('%Y-%m-%d-%H-%M')}"
 
     async def close(self):
         if self.producer:
             await self.producer.stop()
-        if self.consumer:
-            await self.consumer.stop()
+        if self.admin_client:
+            await self.admin_client.close()
         logger.info("Kafka connections closed")

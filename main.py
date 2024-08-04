@@ -5,18 +5,16 @@ from datetime import datetime
 import json
 import logging
 import asyncio
-from kafka_manager import KafkaManager
 from redis_manager import RedisManager
+from kafka_manager import KafkaManager
 import uuid
 
-# 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Redis와 Kafka 매니저 인스턴스 생성
 redis_manager = RedisManager()
 kafka_manager = KafkaManager()
 active_connections = {}
@@ -43,7 +41,6 @@ async def get():
         content = file.read()
     return HTMLResponse(content)
 
-# Redis에서 메시지를 구독하고 WebSocket을 통해 브로드캐스트
 async def broadcast_messages():
     await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
@@ -76,16 +73,17 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "id": str(uuid.uuid4()),
                     "client_id": client_id,
                     "message": data,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().timestamp()
                 }
+
+                # 즉시 브로드캐스팅
+                await asyncio.gather(
+                    *[conn.send_text(json.dumps(message)) for conn in active_connections.values()],
+                    return_exceptions=True
+                )
 
                 # Redis에 메시지 저장
                 await redis_manager.save_message(message)
-                logger.debug(f"Saved message to Redis: {message}")
-
-                # Redis에 메시지 발행 (실시간 브로드캐스트용)
-                await redis_manager.publish("chat", json.dumps(message))
-                logger.debug(f"Published message to Redis: {message}")
 
             except WebSocketDisconnect:
                 logger.info(f"Client disconnected: {client_id}")
@@ -104,6 +102,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             del active_connections[client_id]
         redis_manager.decrement_connection_count(client_ip)
         logger.info(f"Connection closed for client: {client_id}")
+
+@app.get("/messages")
+async def get_recent_messages(count: int = 100):
+    messages = await redis_manager.get_new_messages()
+    return {"messages": messages[:count]}
 
 if __name__ == "__main__":
     import uvicorn
