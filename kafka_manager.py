@@ -27,8 +27,7 @@ class KafkaManager:
                 api_version="auto",
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 enable_idempotence=True,  # 멱등성 활성화
-                acks='all',               # 모든 복제본에 메시지가 기록될 때까지 기다림
-                retries=5                 # 재시도 횟수 설정
+                acks='all',               # 모든 복제본에 메시지가 기록될 때까지 기다림            
             )
             await self.producer.start()
             logger.info(f"Kafka producer connected to {self.bootstrap_servers}")
