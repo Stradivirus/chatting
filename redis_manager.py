@@ -160,11 +160,29 @@ class RedisManager:
                 if self.connection_counts[ip_address] <= 0:
                     del self.connection_counts[ip_address]
 
-    async def is_message_duplicate(self, message_id):
-        # Redis에서 메시지 ID가 존재하는지 확인
-        exists = await self.redis.exists(message_id)
-        if exists:
-            return True
-        else:
-            await self.redis.setex(message_id, 60, "1")  # 메시지 ID를 60초 동안 유지
-            return False
+    async def save_message(self, uuid, message):
+        # 메시지를 Redis에 저장하고 1시간 후에 삭제되도록 설정
+        try:
+            await self.redis.setex(uuid, 3600, json.dumps(message))
+            logger.info(f"Message with UUID {uuid} saved")
+        except RedisError as e:
+            logger.error(f"Error saving message with UUID {uuid}: {e}")
+
+    async def get_message(self, uuid):
+        # Redis에서 메시지 가져오기
+        try:
+            message = await self.redis.get(uuid)
+            if message:
+                return json.loads(message)
+            return None
+        except RedisError as e:
+            logger.error(f"Error retrieving message with UUID {uuid}: {e}")
+            return None
+
+    async def delete_message(self, uuid):
+        # Redis에서 메시지 삭제
+        try:
+            await self.redis.delete(uuid)
+            logger.info(f"Message with UUID {uuid} deleted")
+        except RedisError as e:
+            logger.error(f"Error deleting message with UUID {uuid}: {e}")
