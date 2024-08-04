@@ -21,6 +21,8 @@ spec:
         ports:
         - containerPort: 9092
           name: kafka
+        - containerPort: 9093
+          name: controller
         env:
         - name: BITNAMI_DEBUG
           value: "true"
@@ -33,7 +35,7 @@ spec:
         - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
           value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
         - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-          value: "1@kafka-count:9093"
+          value: "1@kafka-count.chat.svc.cluster.local:9093"
         - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
           value: "CONTROLLER"
         - name: KAFKA_CFG_PROCESS_ROLES
@@ -64,5 +66,7 @@ spec:
   ports:
   - port: 9092
     name: kafka
+  - port: 9093
+    name: controller
   selector:
     app: kafka-count
