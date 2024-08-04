@@ -73,7 +73,7 @@ class RedisManager:
             await self.reconnect()
             return False
 
-     async def add_to_chat_history(self, message):
+    async def add_to_chat_history(self, message):
         try:
             timestamp = time.time()
             await self.redis.zadd(self.chat_history_key, {message: timestamp})
