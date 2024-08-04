@@ -21,7 +21,7 @@ spec:
         - containerPort: 9092
         env:
         - name: BITNAMI_DEBUG
-          value: "false"
+          value: "true"
         - name: KAFKA_CFG_LISTENERS
           value: "PLAINTEXT://:9092,CONTROLLER://:9093"
         - name: KAFKA_CFG_ADVERTISED_LISTENERS
@@ -39,7 +39,7 @@ spec:
         - name: KAFKA_CFG_NODE_ID
           valueFrom:
             fieldRef:
-              fieldPath: metadata.annotations['statefulset.kubernetes.io/pod-index']
+              fieldPath: metadata.annotations['statefulset.kubernetes.io/pod-name']
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -52,6 +52,10 @@ spec:
           value: "true"
         - name: KAFKA_KRAFT_CLUSTER_ID
           value: "abcdefghijklmnopqrstuv"
+        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+          value: "1@kafka-0.kafka-service.$(POD_NAMESPACE).svc.cluster.local:9093,2@kafka-1.kafka-service.$(POD_NAMESPACE).svc.cluster.local:9093,3@kafka-2.kafka-service.$(POD_NAMESPACE).svc.cluster.local:9093"
+        - name: ALLOW_PLAINTEXT_LISTENER
+          value: "yes"
 ---
 apiVersion: v1
 kind: Service
