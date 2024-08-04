@@ -23,8 +23,8 @@ async def startup_event():
     try:
         await redis_manager.connect()
         await kafka_manager.connect_producer()
-        asyncio.create_task(kafka_manager.manage_topics())
         asyncio.create_task(broadcast_messages())
+        asyncio.create_task(kafka_manager.kafka_message_handler())
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)
         raise
@@ -47,8 +47,8 @@ async def broadcast_messages():
             *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
             return_exceptions=True
         )
-        await kafka_manager.produce_message(json.dumps(message))
-        logger.debug(f"Broadcasted and stored message: {message}")
+        await kafka_manager.add_to_message_queue(message)
+        logger.debug(f"Broadcasted message and added to Kafka queue: {message}")
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):

@@ -1,7 +1,8 @@
 import os
+import json
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
-from kafka.errors import KafkaError, TopicAlreadyExistsError
+from aiokafka.errors import KafkaError, TopicAlreadyExistsError
 import logging
 from datetime import datetime, timedelta
 import asyncio
@@ -16,13 +17,14 @@ class KafkaManager:
         self.consumer = None
         self.admin_client = None
         self.topic_prefix = "chat-messages-"
+        self.message_queue = asyncio.Queue()
 
     async def connect_producer(self):
         try:
             self.producer = AIOKafkaProducer(
                 bootstrap_servers=self.bootstrap_servers,
-                api_version="auto",  # API 버전 자동 감지
-                value_serializer=lambda v: str(v).encode('utf-8')
+                api_version="auto",
+                value_serializer=lambda v: json.dumps(v).encode('utf-8')
             )
             await self.producer.start()
             logger.info(f"Kafka producer connected to {self.bootstrap_servers}")
@@ -30,19 +32,19 @@ class KafkaManager:
             logger.error(f"Failed to connect Kafka producer: {e}")
             raise
 
-    async def connect_consumer(self, topic):
+    async def connect_consumer(self, topics):
         try:
             self.consumer = AIOKafkaConsumer(
-                topic,
                 bootstrap_servers=self.bootstrap_servers,
-                api_version="auto",  # API 버전 자동 감지
+                api_version="auto",
                 auto_offset_reset='latest',
                 enable_auto_commit=True,
                 group_id='chat-group',
                 value_deserializer=lambda x: x.decode('utf-8')
             )
             await self.consumer.start()
-            logger.info(f"Kafka consumer connected to {self.bootstrap_servers} and subscribed to topic {topic}")
+            await self.consumer.subscribe(topics)
+            logger.info(f"Kafka consumer connected to {self.bootstrap_servers} and subscribed to topics {topics}")
         except KafkaError as e:
             logger.error(f"Failed to connect Kafka consumer: {e}")
             raise
@@ -51,7 +53,7 @@ class KafkaManager:
         try:
             self.admin_client = AIOKafkaAdminClient(
                 bootstrap_servers=self.bootstrap_servers,
-                api_version="auto"  # API 버전 자동 감지
+                api_version="auto"
             )
             logger.info(f"Kafka admin client connected to {self.bootstrap_servers}")
         except KafkaError as e:
@@ -82,15 +84,13 @@ class KafkaManager:
             await self.connect_producer()
         
         topic_name = self.get_topic_name()
-        logger.info(f"Producing message to topic: {topic_name}")
-        await self.create_topic_if_not_exists(topic_name)
         
         try:
             await self.producer.send_and_wait(topic_name, message)
             logger.info(f"Successfully sent message to topic {topic_name}")
         except KafkaError as e:
             logger.error(f"Failed to send message to Kafka: {e}", exc_info=True)
-            raise
+            await self.message_queue.put(message)  # 실패한 메시지를 큐에 추가
 
     async def consume_messages(self, days=1):
         end_date = datetime.now()
@@ -149,4 +149,17 @@ class KafkaManager:
             except Exception as e:
                 logger.error(f"Error in topic management cycle: {e}", exc_info=True)
             finally:
-                await asyncio.sleep(60)  # 1분마다 실행
+                await asyncio.sleep(300)  # 5분마다 실행
+    
+    async def kafka_message_handler(self):
+        while True:
+            try:
+                message = await self.message_queue.get()
+                await self.produce_message(message)
+            except Exception as e:
+                logger.error(f"Error handling Kafka message: {e}")
+                await self.message_queue.put(message)  # 실패한 메시지를 다시 큐에 추가
+            await asyncio.sleep(0.1)
+
+    async def add_to_message_queue(self, message):
+        await self.message_queue.put(message)
