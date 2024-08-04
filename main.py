@@ -25,8 +25,8 @@ async def startup_event():
         await kafka_manager.connect_producer()
         asyncio.create_task(broadcast_messages())
         asyncio.create_task(kafka_manager.kafka_message_handler())
-        logger.info("Starting consume_messages task")  # 추가된 로깅
-        asyncio.create_task(kafka_manager.consume_messages())  # 메시지 소비 시작
+        logger.info("Starting consume_messages task")
+        asyncio.create_task(kafka_manager.start_consuming())  # 수정된 부분
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)
         raise

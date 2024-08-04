@@ -104,10 +104,20 @@ class KafkaManager:
         
         try:
             async for message in self.consumer:
-                yield message.value
+                # 메시지 처리 로직
+                logger.info(f"Received message: {message.value}")
+                # 여기에 메시지 처리 로직을 추가하세요
         except KafkaError as e:
             logger.error(f"Error consuming messages from Kafka: {e}")
             raise
+
+    async def start_consuming(self):
+        while True:
+            try:
+                await self.consume_messages()
+            except Exception as e:
+                logger.error(f"Error in consume_messages: {e}")
+            await asyncio.sleep(60)  # 1분 대기 후 다시 시도
 
     async def delete_old_topics(self):
         if not self.admin_client:
