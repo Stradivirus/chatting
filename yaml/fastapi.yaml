@@ -24,7 +24,7 @@ spec:
         - name: REDIS_PORT
           value: "6379"
         - name: KAFKA_BOOTSTRAP_SERVERS
-          value: "kafka-count:9092"
+          value: kafka-count-svc:9092"
 ---
 apiVersion: v1
 kind: Service
