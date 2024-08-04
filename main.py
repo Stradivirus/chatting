@@ -14,7 +14,7 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 redis_manager = RedisManager()
-active_connections = {}
+active_connections = {}  # 클라이언트 ID를 키로 사용하여 WebSocket 객체 저장
 
 message_history = {}
 banned_users = set()
@@ -25,7 +25,7 @@ async def get():
         content = file.read()
     return HTMLResponse(content)
 
-# 현재 접속자 수를 반환하는 엔드포인트 추가
+# 현재 접속자 수를 반환하는 엔드포인트
 @app.get("/connections")
 async def get_connections():
     return {"connections": len(active_connections)}
@@ -38,6 +38,17 @@ async def broadcast_messages():
             return_exceptions=True
         )
         logger.debug(f"Broadcasted message to all clients: {message}")
+
+# 접속자 수를 주기적으로 브로드캐스트하는 함수
+async def broadcast_connection_count():
+    while True:
+        count = len(active_connections)
+        message = {"type": "connection_count", "count": count}
+        await asyncio.gather(
+            *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
+            return_exceptions=True
+        )
+        await asyncio.sleep(1)  # 1초마다 업데이트
 
 async def check_spam(client_id: str, message: str) -> bool:
     current_time = datetime.now()
@@ -76,8 +87,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     try:
         await websocket.accept()
         redis_manager.increment_connection_count(client_ip)
-        active_connections[client_id] = websocket
+        active_connections[client_id] = websocket  # 클라이언트 ID를 키로 사용하여 WebSocket 객체 저장
         logger.info(f"New client connected: {client_id} from IP: {client_ip}")
+        
+        # 새 클라이언트 연결 시 현재 접속자 수 전송
+        count = len(active_connections)
+        await websocket.send_text(json.dumps({"type": "connection_count", "count": count}))
         
         while True:
             try:
@@ -125,11 +140,19 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         logger.error(f"Error in websocket connection: {str(e)}")
     finally:
         if client_id in active_connections:
-            del active_connections[client_id]
+            del active_connections[client_id]  # 연결 해제 시 클라이언트 ID 제거
         if client_id in message_history:
             del message_history[client_id]
         redis_manager.decrement_connection_count(client_ip)
         logger.info(f"Connection closed for client: {client_id}")
+        
+        # 클라이언트 연결 해제 시 접속자 수 업데이트 및 브로드캐스트
+        count = len(active_connections)
+        message = {"type": "connection_count", "count": count}
+        await asyncio.gather(
+            *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
+            return_exceptions=True
+        )
 
 @app.on_event("startup")
 async def startup_event():
@@ -137,7 +160,8 @@ async def startup_event():
         await redis_manager.connect()
         logger.info("Connected to Redis")
         asyncio.create_task(broadcast_messages())
-        logger.info("Started message broadcasting task")
+        asyncio.create_task(broadcast_connection_count())  # 접속자 수 브로드캐스트 태스크 시작
+        logger.info("Started message broadcasting and connection count tasks")
     except Exception as e:
         logger.error(f"Failed to start up properly: {e}", exc_info=True)
         raise

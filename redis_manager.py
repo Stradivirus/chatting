@@ -159,3 +159,16 @@ class RedisManager:
                 self.connection_counts[ip_address] -= 1
                 if self.connection_counts[ip_address] <= 0:
                     del self.connection_counts[ip_address]
+
+    async def get_total_connection_count(self):
+        # 전체 연결 수 반환
+        return sum(self.connection_counts.values())
+
+    async def update_total_connection_count(self, count):
+        # 전체 연결 수 업데이트 (Redis에 저장)
+        await self.redis.set("total_connection_count", count)
+
+    async def get_total_connection_count_from_redis(self):
+        # Redis에서 전체 연결 수 조회
+        count = await self.redis.get("total_connection_count")
+        return int(count) if count else 0

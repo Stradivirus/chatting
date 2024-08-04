@@ -1,6 +1,7 @@
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
+const connectionCountDisplay = document.getElementById('connection-count'); // 새로 추가된 요소
 
 const clientId = Date.now().toString();
 let ws;
@@ -35,6 +36,8 @@ function connectWebSocket() {
         const message = JSON.parse(event.data);
         if (message.type === 'warning') {
             displayWarning(message.message);
+        } else if (message.type === 'connection_count') {
+            updateConnectionCountDisplay(message.count); // 접속자 수 업데이트
         } else {
             displayMessage(message);
         }
@@ -45,7 +48,6 @@ function connectWebSocket() {
         sendButton.disabled = true;
         messageInput.disabled = true;
         reconnectWithBackoff();
-        updateConnectionCount(); // WebSocket 연결 해제 시 접속자 수 업데이트
     };
 
     ws.onerror = function(error) {
@@ -194,16 +196,25 @@ function removeWarning() {
     }
 }
 
-// 접속자 수를 업데이트하는 함수 추가
+// 접속자 수를 업데이트하는 함수
+function updateConnectionCountDisplay(count) {
+    connectionCountDisplay.textContent = `접속자 수: ${count}`;
+}
+
+// 서버로부터 접속자 수를 가져오는 함수
 async function updateConnectionCount() {
-    const response = await fetch('/connections');
-    const data = await response.json();
-    document.getElementById('connection-count').textContent = `접속자 수: ${data.connections}`;
+    try {
+        const response = await fetch('/connections');
+        const data = await response.json();
+        updateConnectionCountDisplay(data.connections);
+    } catch (error) {
+        console.error('Error fetching connection count:', error);
+    }
 }
 
 // DOM이 완전히 로드된 후 실행
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket();
     updateConnectionCount(); // 페이지 로드 시 접속자 수 업데이트
-    setInterval(updateConnectionCount, 5000); // 5초마다 접속자 수 업데이트
+    setInterval(updateConnectionCount, 1000); // 1초마다 접속자 수 업데이트
 });
