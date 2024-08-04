@@ -7,15 +7,16 @@ import logging
 import asyncio
 from kafka_manager import KafkaManager
 from redis_manager import RedisManager
+import uuid
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname=s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 redis_manager = RedisManager()
-kafka_manager = KafkaManager()
+kafka_manager = KafkaManager(topic_retention_minutes=5)  # 5분 후 토픽 삭제
 active_connections = {}
 
 @app.on_event("startup")
@@ -23,10 +24,12 @@ async def startup_event():
     try:
         await redis_manager.connect()
         await kafka_manager.connect_producer()
+        await kafka_manager.connect_admin()
         asyncio.create_task(broadcast_messages())
         asyncio.create_task(kafka_manager.kafka_message_handler())
         logger.info("Starting consume_messages task")
-        asyncio.create_task(kafka_manager.start_consuming())  # 수정된 부분
+        asyncio.create_task(kafka_manager.start_consuming())
+        await kafka_manager.start_background_tasks()
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)
         raise
@@ -72,6 +75,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 logger.debug(f"Received message from {client_id}: {data}")
                 
                 message = {
+                    "id": str(uuid.uuid4()),
                     "client_id": client_id,
                     "message": data,
                     "timestamp": datetime.now().isoformat()
