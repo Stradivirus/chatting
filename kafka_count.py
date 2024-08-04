@@ -89,17 +89,3 @@ class KafkaManager:
     def stop_count_updates(self):
         if self.update_task:
             self.update_task.cancel()
-
-async def main():
-    kafka_manager = KafkaManager()
-    await kafka_manager.connect()
-    await kafka_manager.create_topic("connection_count")
-    await kafka_manager.start_count_updates()
-
-    async def handle_update(data):
-        print(f"Received update: {data}")
-
-    await kafka_manager.consume_count_updates(handle_update)
-
-if __name__ == "__main__":
-    asyncio.run(main())

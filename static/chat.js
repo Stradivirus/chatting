@@ -38,7 +38,7 @@ function connectWebSocket() {
         if (message.type === 'warning') {
             displayWarning(message.message);
         } else if (message.type === 'connection_count') {
-            updateConnectionCount(message.count);
+            updateConnectionCountDisplay(message.count);
         } else {
             displayMessage(message);
         }
@@ -206,12 +206,20 @@ function removeWarning() {
     }
 }
 
-// 연결 수 업데이트 함수
-function updateConnectionCount(count) {
+// 접속자 수 표시 업데이트 함수
+function updateConnectionCountDisplay(count) {
     connectionCountDisplay.textContent = `현재 접속자 수: ${count}`;
+}
+
+// 접속자 수 갱신 함수
+function updateConnectionCount() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'request_connection_count' }));
+    }
 }
 
 // DOM이 완전히 로드된 후 실행
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket();
+    setInterval(updateConnectionCount, 1000); // 1초마다 접속자 수 갱신
 });

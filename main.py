@@ -103,6 +103,16 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     banned_users.remove(client_id)
                     continue
                 
+                # 접속자 수 요청 메시지 처리
+                if data == '{"type":"request_connection_count"}':
+                    connection_count = len(active_connections)
+                    count_message = {
+                        "type": "connection_count",
+                        "count": connection_count
+                    }
+                    await websocket.send_text(json.dumps(count_message))
+                    continue
+
                 message = {
                     "client_id": client_id,
                     "message": data,
@@ -130,6 +140,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         # Update Kafka connection count
         await kafka_manager.update_connection_count(-1)
         logger.info(f"Connection closed for client: {client_id}")
+
 
 async def broadcast_connection_count(count):
     count_message = json.dumps({"type": "connection_count", "count": count})
