@@ -1,10 +1,11 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from datetime import datetime, timedelta
 import json
 import logging
 import asyncio
+from kafka_manager import KafkaManager
 from redis_manager import RedisManager
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -14,10 +15,23 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 redis_manager = RedisManager()
+kafka_manager = KafkaManager()
 active_connections = {}
 
 message_history = {}
 banned_users = set()
+
+@app.on_event("startup")
+async def startup_event():
+    await redis_manager.connect()
+    await kafka_manager.connect_producer()
+    asyncio.create_task(kafka_manager.manage_topics())
+    asyncio.create_task(broadcast_messages())
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await redis_manager.close()
+    kafka_manager.close()
 
 @app.get("/")
 async def get():
@@ -32,7 +46,8 @@ async def broadcast_messages():
             *[connection.send_text(json.dumps(message)) for connection in active_connections.values()],
             return_exceptions=True
         )
-        logger.debug(f"Broadcasted message to all clients: {message}")
+        await kafka_manager.produce_message(json.dumps(message))
+        logger.debug(f"Broadcasted and stored message: {message}")
 
 async def check_spam(client_id: str, message: str) -> bool:
     current_time = datetime.now()
@@ -64,7 +79,6 @@ async def check_spam(client_id: str, message: str) -> bool:
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     client_ip = websocket.client.host
     
-    # 연결 허용 여부 확인을 연결 수락 전으로 이동
     if not await redis_manager.is_allowed_connection(client_ip):
         await websocket.close(code=1008, reason="Connection not allowed")
         return
@@ -126,22 +140,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             del message_history[client_id]
         redis_manager.decrement_connection_count(client_ip)
         logger.info(f"Connection closed for client: {client_id}")
-
-@app.on_event("startup")
-async def startup_event():
-    try:
-        await redis_manager.connect()
-        logger.info("Connected to Redis")
-        asyncio.create_task(broadcast_messages())
-        logger.info("Started message broadcasting task")
-    except Exception as e:
-        logger.error(f"Failed to start up properly: {e}", exc_info=True)
-        raise
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await redis_manager.close()
-    logger.info("Closed Redis connection")
 
 if __name__ == "__main__":
     import uvicorn
