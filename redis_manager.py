@@ -2,8 +2,7 @@ import os
 import json
 import asyncio
 import ipaddress
-from redis.asyncio import Redis
-from redis.asyncio.connection import ConnectionPool
+from redis.asyncio import RedisCluster
 from redis.exceptions import RedisError
 import aiohttp
 import logging
@@ -16,7 +15,7 @@ class RedisManager:
     def __init__(self):
         self.redis_host = os.getenv("REDIS_HOST", "redis-cluster.chat.svc.cluster.local")
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
-        self.pool = None
+        self.redis = None
         self.pubsub = None
         self.blocked_ips = set()
         self.connection_counts = {}
@@ -26,21 +25,18 @@ class RedisManager:
         self.message_ttl = 7200  # 2 hours in seconds
 
     async def connect(self):
-        if not self.pool:
+        if not self.redis:
             try:
-                self.pool = ConnectionPool(
-                    host=self.redis_host,
-                    port=self.redis_port,
-                    decode_responses=True,
-                    max_connections=10
+                self.redis = await RedisCluster.from_url(
+                    f"redis://{self.redis_host}:{self.redis_port}",
+                    decode_responses=True
                 )
-                self.redis = Redis(connection_pool=self.pool)
                 await self.redis.ping()
                 self.pubsub = self.redis.pubsub()
-                logger.info(f"Connected to Redis at {self.redis_host}:{self.redis_port}")
+                logger.info(f"Connected to Redis Cluster at {self.redis_host}:{self.redis_port}")
             except RedisError as e:
-                logger.error(f"Failed to connect to Redis: {e}")
-                await self.reconnect()
+                logger.error(f"Failed to connect to Redis Cluster: {e}")
+                raise
 
     async def reconnect(self, max_retries=3):
         for attempt in range(max_retries):
@@ -50,17 +46,17 @@ class RedisManager:
                 return
             except RedisError as e:
                 logger.error(f"Reconnection attempt {attempt + 1} failed: {e}")
-        raise Exception("Failed to reconnect to Redis after multiple attempts")
+        raise Exception("Failed to reconnect to Redis Cluster after multiple attempts")
 
     async def save_message(self, message):
         try:
-            if not self.pool:
+            if not self.redis:
                 await self.connect()
             
             message_str = json.dumps(message)
             
             # 파이프라인을 사용하여 여러 작업을 한 번에 실행
-            async with self.redis.pipeline(transaction=True) as pipe:
+            async with self.redis.pipeline(transaction=False) as pipe:
                 await pipe.zadd(self.chat_list_key, {message_str: message['timestamp']})
                 await pipe.expire(self.chat_list_key, self.message_ttl)
                 await pipe.publish("chat", message_str)
@@ -73,7 +69,7 @@ class RedisManager:
 
     async def get_new_messages(self):
         try:
-            if not self.pool:
+            if not self.redis:
                 await self.connect()
             
             last_processed_id = await self.redis.get(self.last_processed_id_key) or "0"
@@ -100,7 +96,7 @@ class RedisManager:
 
     async def publish(self, channel, message):
         try:
-            if not self.pool:
+            if not self.redis:
                 await self.connect()
             return await self.redis.publish(channel, message)
         except RedisError as e:
@@ -134,8 +130,10 @@ class RedisManager:
                 await asyncio.sleep(1)
 
     async def close(self):
-        if self.pool:
-            await self.pool.disconnect()
+        if self.redis:
+            await self.redis.close()
+
+    # ... (나머지 메서드들은 그대로 유지)
 
     async def is_allowed_connection(self, ip_address):
         try:
