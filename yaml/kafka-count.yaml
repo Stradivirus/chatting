@@ -31,11 +31,11 @@ spec:
         - name: KAFKA_CFG_LISTENERS
           value: "PLAINTEXT://:9092,CONTROLLER://:9093"
         - name: KAFKA_CFG_ADVERTISED_LISTENERS
-          value: "PLAINTEXT://kafka-count.chat.svc.cluster.local:9092"
+          value: "PLAINTEXT://kafka-count-svc.chat.svc.cluster.local:9092"
         - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
           value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
         - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
-          value: "1@kafka-count.chat.svc.cluster.local:9093"
+          value: "1@kafka-count-svc.chat.svc.cluster.local:9093"
         - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
           value: "CONTROLLER"
         - name: KAFKA_CFG_PROCESS_ROLES
