@@ -23,6 +23,8 @@ spec:
           value: "redis-cluster.chat.svc.cluster.local"
         - name: REDIS_PORT
           value: "6379"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-service.chat.svc.cluster.local:9092"
 ---
 apiVersion: v1
 kind: Service

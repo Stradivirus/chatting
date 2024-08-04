@@ -6,6 +6,9 @@ import json
 import logging
 import asyncio
 from redis_manager import RedisManager
+from kafka_manager import KafkaManager
+
+
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -13,6 +16,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+kafka_manager = KafkaManager()
 redis_manager = RedisManager()
 active_connections = {}
 
@@ -106,7 +110,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 }
 
                 await redis_manager.publish("chat", json.dumps(message))
-                logger.debug(f"Published message to Redis: {message}")
+                await kafka_manager.send_message("chat_topic", message)  # Kafka로 메시지 전송
+                logger.debug(f"Published message to Redis and Kafka: {message}")
             except WebSocketDisconnect:
                 logger.info(f"Client disconnected: {client_id}")
                 break
@@ -127,21 +132,28 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         redis_manager.decrement_connection_count(client_ip)
         logger.info(f"Connection closed for client: {client_id}")
 
+
 @app.on_event("startup")
 async def startup_event():
     try:
         await redis_manager.connect()
         logger.info("Connected to Redis")
+        await kafka_manager.connect()
+        logger.info("Connected to Kafka")
         asyncio.create_task(broadcast_messages())
-        logger.info("Started message broadcasting task")
+        asyncio.create_task(consume_kafka_messages())
+        logger.info("Started message broadcasting and Kafka consuming tasks")
     except Exception as e:
         logger.error(f"Failed to start up properly: {e}", exc_info=True)
         raise
 
+
 @app.on_event("shutdown")
 async def shutdown_event():
     await redis_manager.close()
-    logger.info("Closed Redis connection")
+    await kafka_manager.disconnect()
+    logger.info("Closed Redis and Kafka connections")
+
 
 if __name__ == "__main__":
     import uvicorn
