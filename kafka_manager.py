@@ -21,20 +21,20 @@ class KafkaManager:
         self.message_queue = asyncio.Queue()
 
     async def connect_producer(self):
-    try:
-        self.producer = AIOKafkaProducer(
-            bootstrap_servers=self.bootstrap_servers,
-            api_version="auto",
-            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-            enable_idempotence=True,  # 멱등성 활성화
-            acks='all',  # 모든 복제본에 메시지가 기록될 때까지 기다림
-            retries=5  # 재시도 횟수 설정
-        )
-        await self.producer.start()
-        logger.info(f"Kafka producer connected to {self.bootstrap_servers}")
-    except KafkaError as e:
-        logger.error(f"Failed to connect Kafka producer: {e}")
-        raise
+        try:
+            self.producer = AIOKafkaProducer(
+                bootstrap_servers=self.bootstrap_servers,
+                api_version="auto",
+                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                enable_idempotence=True,  # 멱등성 활성화
+                acks='all',               # 모든 복제본에 메시지가 기록될 때까지 기다림
+                retries=5                 # 재시도 횟수 설정
+            )
+            await self.producer.start()
+            logger.info(f"Kafka producer connected to {self.bootstrap_servers}")
+        except KafkaError as e:
+            logger.error(f"Failed to connect Kafka producer: {e}")
+            raise
 
 
     async def connect_consumer(self, topics):
