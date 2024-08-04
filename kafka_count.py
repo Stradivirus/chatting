@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class KafkaManager:
     def __init__(self):
-        self.bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-count-svc:9092")
+        self.bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-count-svc.chat.svc.cluster.local:9092")
         self.producer = None
         self.consumer = None
         self.admin_client = None
