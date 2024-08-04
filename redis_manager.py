@@ -3,43 +3,47 @@ import json
 import asyncio
 import ipaddress
 from redis.asyncio import Redis
+from redis.asyncio.cluster import RedisCluster
 from redis.asyncio.connection import ConnectionPool
 from redis.exceptions import RedisError
 import aiohttp
 import logging
 import time
 
-# 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class RedisManager:
     def __init__(self):
-        # Redis 연결 정보 설정
         self.redis_host = os.getenv("REDIS_HOST", "redis-cluster.chat.svc.cluster.local")
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
+        self.is_cluster = os.getenv("REDIS_CLUSTER", "false").lower() == "true"
         self.pool = None
+        self.redis = None
         self.pubsub = None
-        self.blocked_ips = set()  # 차단된 IP 주소 저장
-        self.connection_counts = {}  # IP별 연결 수 추적
-        self.max_connections_per_ip = 3  # IP당 최대 연결 수
-        self.chat_history_key = "chat_history"  # 채팅 기록을 저장할 키
-        self.chat_history_ttl = 7200  # 채팅 기록 유지 시간 (2시간)
+        self.blocked_ips = set()
+        self.connection_counts = {}
+        self.max_connections_per_ip = 3
+        self.chat_history_key = "chat_history"
+        self.chat_history_ttl = 7200
 
     async def connect(self):
-        # Redis에 연결
-        if not self.pool:
+        if not self.redis:
             try:
-                self.pool = ConnectionPool(
-                    host=self.redis_host,
-                    port=self.redis_port,
-                    decode_responses=True,
-                    max_connections=10
-                )
-                self.redis = Redis(connection_pool=self.pool)
+                if self.is_cluster:
+                    self.redis = RedisCluster(host=self.redis_host, port=self.redis_port, decode_responses=True)
+                else:
+                    self.pool = ConnectionPool(
+                        host=self.redis_host,
+                        port=self.redis_port,
+                        decode_responses=True,
+                        max_connections=20  # 연결 풀 크기 증가
+                    )
+                    self.redis = Redis(connection_pool=self.pool)
+                
                 await self.redis.ping()
                 self.pubsub = self.redis.pubsub()
-                logger.info(f"Connected to Redis at {self.redis_host}:{self.redis_port}")
+                logger.info(f"Connected to Redis{'Cluster' if self.is_cluster else ''} at {self.redis_host}:{self.redis_port}")
             except RedisError as e:
                 logger.error(f"Failed to connect to Redis: {e}")
                 await self.reconnect()
@@ -56,26 +60,26 @@ class RedisManager:
         raise Exception("Failed to reconnect to Redis after multiple attempts")
 
     async def publish(self, channel, message):
-        # 메시지 발행 및 채팅 기록 저장
         try:
-            if not self.pool:
+            if not self.redis:
                 await self.connect()
-            await self.redis.publish(channel, message)
-            await self.add_to_chat_history(message)
+            await asyncio.gather(
+                self.redis.publish(channel, message),
+                self.add_to_chat_history(message)
+            )
             return True
         except RedisError as e:
             logger.error(f"Error publishing message: {e}")
             await self.reconnect()
-            await self.redis.publish(channel, message)
-            await self.add_to_chat_history(message)
-            return True
+            return False
 
     async def add_to_chat_history(self, message):
-        # 채팅 기록에 메시지 추가
         try:
             timestamp = time.time()
-            await self.redis.zadd(self.chat_history_key, {message: timestamp})
-            await self.redis.zremrangebyscore(self.chat_history_key, 0, timestamp - self.chat_history_ttl)
+            pipeline = self.redis.pipeline()
+            pipeline.zadd(self.chat_history_key, {message: timestamp})
+            pipeline.zremrangebyscore(self.chat_history_key, 0, timestamp - self.chat_history_ttl)
+            await pipeline.execute()
         except RedisError as e:
             logger.error(f"Error adding message to chat history: {e}")
 
@@ -144,27 +148,24 @@ class RedisManager:
         return True
 
     async def is_allowed_connection(self, ip_address):
-        # 연결 허용 여부 확인
         try:
             ip = ipaddress.ip_address(ip_address)
             
             if ip.is_private:
-                logger.info(f"IP {ip_address} is private, allowing connection without restrictions")
                 return True
             
-            # 공인 IP에 대해서만 연결 수 제한 확인
             if ip.is_global:
                 if self.connection_counts.get(ip_address, 0) >= self.max_connections_per_ip:
                     logger.warning(f"IP {ip_address} has reached the maximum number of connections")
                     return False
                 
-                logger.info(f"IP {ip_address} is global, checking for VPN/Proxy")
-                if not await self.check_ip(ip_address):
-                    return False
-                
-                return True
+                return await self.check_ip(ip_address)
             
             logger.warning(f"IP {ip_address} is not private or global, blocking connection")
+            return False
+
+        except ValueError:
+            logger.error(f"Invalid IP address: {ip_address}")
             return False
 
         except ValueError:
