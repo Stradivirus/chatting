@@ -5,3 +5,4 @@ aioredis
 asyncio
 websockets
 aiohttp
+prometheus-fastapi-instrumentator
