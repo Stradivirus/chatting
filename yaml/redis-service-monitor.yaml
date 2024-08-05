@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-exporter-monitor
+  namespace: prometheus  # Prometheus가 설치된 네임스페이스로 변경
+  labels:
+    release: prometheus  # Prometheus Helm 릴리스 이름과 일치하도록 설정
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: redis-exporter  # Redis Exporter 서비스의 라벨과 일치
+      app.kubernetes.io/name: prometheus-redis-exporter  # Redis Exporter 서비스의 라벨과 일치
+  endpoints:
+  - port: redis-exporter  # Redis Exporter 서비스의 포트 이름
+    path: /metrics
