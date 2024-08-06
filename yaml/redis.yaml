@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: redis-cluster-config
-  namespace: chat
+  namespace: chatting
 data:
   redis.conf: |
     cluster-enabled yes
@@ -15,7 +15,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: redis-cluster
-  namespace: chat
+  namespace: chatting
 spec:
   serviceName: "redis-cluster"
   replicas: 6
@@ -52,7 +52,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis-cluster
-  namespace: chat
+  namespace: chatting
   labels:
     app: redis-cluster
 spec:
@@ -71,13 +71,13 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: redis-cluster-init-sa
-  namespace: chat
+  namespace: chatting
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: redis-cluster-init-role
-  namespace: chat
+  namespace: chatting
 rules:
 - apiGroups: [""]
   resources: ["pods"]
@@ -87,11 +87,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: redis-cluster-init-rolebinding
-  namespace: chat
+  namespace: chatting
 subjects:
 - kind: ServiceAccount
   name: redis-cluster-init-sa
-  namespace: chat
+  namespace: chatting
 roleRef:
   kind: Role
   name: redis-cluster-init-role

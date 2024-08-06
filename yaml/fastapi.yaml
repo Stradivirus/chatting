@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: fastapi-deployment
-  namespace: chat
+  namespace: chatting
 spec:
   replicas: 7
   selector:
@@ -28,7 +28,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: fastapi-service
-  namespace: chat
+  namespace: chatting
 spec:
   selector:
     app: fastapi
