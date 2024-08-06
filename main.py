@@ -42,19 +42,25 @@ async def check_spam(client_id: str, message: str) -> bool:
     current_time = datetime.now()
     if client_id not in message_history:
         message_history[client_id] = []
+    
     if message_history[client_id] and (current_time - message_history[client_id][-1]['time']).total_seconds() < 0.5:
         return True
+    
     if len(message_history[client_id]) >= 2 and all(m['content'] == message for m in message_history[client_id][-2:]):
         return True
+    
     if len(message) > 30:
         return True
+    
     five_seconds_ago = current_time - timedelta(seconds=5)
     recent_messages = [m for m in message_history[client_id] if m['time'] > five_seconds_ago]
     if len(recent_messages) >= 8:
         return True
+    
     message_history[client_id].append({'content': message, 'time': current_time})
     if len(message_history[client_id]) > 10:
         message_history[client_id] = message_history[client_id][-10:]
+    
     return False
 
 @app.websocket("/ws/{client_id}")
@@ -87,15 +93,15 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 await websocket.send_text(json.dumps(warning))
                 continue
 
-            if await check_spam(client_id, data):
+            is_spam = await check_spam(client_id, data)
+            if is_spam:
                 banned_users.add(client_id)
                 warning = {
                     "type": "warning",
                     "message": "You have been banned for 30 seconds due to spamming."
                 }
                 await websocket.send_text(json.dumps(warning))
-                await asyncio.sleep(30)
-                banned_users.remove(client_id)
+                asyncio.create_task(unban_user_after_delay(client_id, 30))
                 continue
 
             message = {
@@ -103,8 +109,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 "message": data,
                 "timestamp": datetime.now().isoformat()
             }
-            await redis_manager.store_message("chat", json.dumps(message))
-            await redis_manager.publish("chat", json.dumps(message))
+            await asyncio.gather(
+                redis_manager.store_message("chat", json.dumps(message)),
+                redis_manager.publish("chat", json.dumps(message))
+            )
             logger.debug(f"Published and stored message to Redis: {message}")
 
     except WebSocketDisconnect:
