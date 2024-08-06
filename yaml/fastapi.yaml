@@ -4,7 +4,7 @@ metadata:
   name: fastapi-rollout
   namespace: chatting
 spec:
-  replicas: 7
+  replicas: 8
   selector:
     matchLabels:
       app: fastapi
@@ -30,7 +30,7 @@ spec:
       - pause: {duration: 60s}
       - setWeight: 57  # 4/7 ≈ 57%
       - pause: {duration: 60s}
-      - setWeight: 86  # 6/7 ≈ 86%
+      - setWeight: 100  
       - pause: {duration: 60s}
 ---
 apiVersion: v1
