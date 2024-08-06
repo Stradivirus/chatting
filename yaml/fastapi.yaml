@@ -64,8 +64,14 @@ spec:
     resource:
       name: cpu
       target:
-        type: AverageValue
-        averageValue: 800m  # 800 millicores, 즉 0.8 cores
+        type: Utilization
+        averageUtilization: 80  # CPU 사용률 80%일 때 스케일 업
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 40  # CPU 사용률 40%일 때 스케일 다운
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 30
