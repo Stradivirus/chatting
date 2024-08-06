@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class RedisManager:
     def __init__(self):
         # Redis 연결 정보 설정
-        self.redis_host = os.getenv("REDIS_HOST", "redis-cluster.chat.svc.cluster.local")
+        self.redis_host = os.getenv("REDIS_HOST", "redis-cluster.chatting.svc.cluster.local")
         self.redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.pool = None
         self.pubsub = None
