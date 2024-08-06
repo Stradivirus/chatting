@@ -64,8 +64,8 @@ spec:
     resource:
       name: cpu
       target:
-        type: Utilization
-        averageUtilization: 80
+        type: AverageValue
+        averageValue: 800m  # 800 millicores, 즉 0.8 cores
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 30
