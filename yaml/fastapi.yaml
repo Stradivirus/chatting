@@ -66,12 +66,12 @@ spec:
       target:
         type: Utilization
         averageUtilization: 80  # CPU 사용률 80%일 때 스케일 업
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 40  # CPU 사용률 40%일 때 스케일 다운
+  # - type: Resource
+  #   resource:
+  #     name: cpu
+  #     target:
+  #       type: Utilization
+  #       averageUtilization: 40  # CPU 사용률 40%일 때 스케일 다운
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 30
@@ -79,9 +79,9 @@ spec:
       - type: Pods
         value: 2
         periodSeconds: 30
-    scaleDown:
-      stabilizationWindowSeconds: 30
-      policies:
-      - type: Pods
-        value: 1
-        periodSeconds: 30
+    # scaleDown:
+    #   stabilizationWindowSeconds: 30
+    #   policies:
+    #   - type: Pods
+    #     value: 1
+    #     periodSeconds: 30
