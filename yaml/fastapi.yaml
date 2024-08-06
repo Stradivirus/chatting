@@ -1,7 +1,7 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
-  name: fastapi-deployment
+  name: fastapi-rollout
   namespace: chatting
 spec:
   replicas: 7
@@ -23,6 +23,15 @@ spec:
           value: "redis-cluster.chatting.svc.cluster.local"
         - name: REDIS_PORT
           value: "6379"
+  strategy:
+    canary:
+      steps:
+      - setWeight: 28  # 2/7 ≈ 28%
+      - pause: {duration: 60s}
+      - setWeight: 57  # 4/7 ≈ 57%
+      - pause: {duration: 60s}
+      - setWeight: 86  # 6/7 ≈ 86%
+      - pause: {duration: 60s}
 ---
 apiVersion: v1
 kind: Service
@@ -36,4 +45,4 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 8000
-  type: ClusterIP  # 로드밸런서 타입 추가
+  type: ClusterIP
