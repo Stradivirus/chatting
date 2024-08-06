@@ -1,7 +1,9 @@
+// DOM 요소 선택
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
 
+// 클라이언트 ID 생성 및 웹소켓 관련 변수 초기화
 const clientId = Date.now().toString();
 let ws;
 let reconnectAttempts = 0;
@@ -16,6 +18,7 @@ let banTimer = null;
 let banCountdown = 0;
 let messageCountTimer = null;
 
+// 웹소켓 연결 함수
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProtocol}//${window.location.host}/ws/${clientId}`;
@@ -31,11 +34,11 @@ function connectWebSocket() {
 
     ws.onmessage = function(event) {
         console.log("Received message:", event.data);
-        const message = JSON.parse(event.data);
-        if (message.type === 'warning') {
-            displayWarning(message.message);
+        const data = JSON.parse(event.data);
+        if (data.type === 'warning') {
+            displayWarning(data.message);
         } else {
-            displayMessage(message);
+            displayMessage(data);
         }
     };
 
@@ -51,6 +54,7 @@ function connectWebSocket() {
     };
 }
 
+// 재연결 함수 (지수 백오프 사용)
 function reconnectWithBackoff() {
     if (reconnectAttempts >= maxReconnectAttempts) {
         console.log("Max reconnection attempts reached. Please refresh the page.");
@@ -66,6 +70,7 @@ function reconnectWithBackoff() {
     }, backoffTime);
 }
 
+// 메시지 전송 이벤트 리스너
 sendButton.onclick = sendMessage;
 
 messageInput.onkeypress = function(e) {
@@ -74,6 +79,7 @@ messageInput.onkeypress = function(e) {
     }
 };
 
+// 메시지 전송 함수
 function sendMessage() {
     const message = messageInput.value.trim();
     if (message && ws && ws.readyState === WebSocket.OPEN) {
@@ -88,6 +94,7 @@ function sendMessage() {
     }
 }
 
+// 메시지 전송 가능 여부 확인 함수
 function canSendMessage(message) {
     const currentTime = Date.now();
 
@@ -120,6 +127,7 @@ function canSendMessage(message) {
     return true;
 }
 
+// 메시지 카운트 업데이트 함수
 function updateMessageCount() {
     messageCount++;
     if (messageCount === 1) {
@@ -134,6 +142,7 @@ function updateMessageCount() {
     }
 }
 
+// 사용자 차단 함수
 function banUser(reason) {
     isBanned = true;
     banCountdown = 30;
@@ -153,6 +162,7 @@ function banUser(reason) {
     }, 1000);
 }
 
+// 차단 경고 업데이트 함수
 function updateBanWarning() {
     const warningElement = document.querySelector('.warning-message');
     if (warningElement) {
@@ -160,13 +170,14 @@ function updateBanWarning() {
     }
 }
 
-function displayMessage(message) {
-    console.log("Displaying message:", message);
+// 메시지 표시 함수
+function displayMessage(data) {
+    console.log("Displaying message:", data);
     const messageElement = document.createElement('div');
-    messageElement.textContent = message.message;
+    messageElement.textContent = `${data.client_id}: ${data.message}`;
     messageElement.classList.add('message');
 
-    if (message.client_id === clientId) {
+    if (data.client_id === clientId) {
         messageElement.classList.add('user-message');
     } else {
         messageElement.classList.add('other-message');
@@ -176,6 +187,7 @@ function displayMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// 경고 메시지 표시 함수
 function displayWarning(warningMessage) {
     removeWarning(); // 기존 경고 메시지 제거
     const warningElement = document.createElement('div');
@@ -185,6 +197,7 @@ function displayWarning(warningMessage) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// 경고 메시지 제거 함수
 function removeWarning() {
     const existingWarning = document.querySelector('.warning-message');
     if (existingWarning) {
@@ -192,7 +205,7 @@ function removeWarning() {
     }
 }
 
-// DOM이 완전히 로드된 후 실행
+// DOM 로드 완료 시 웹소켓 연결
 document.addEventListener('DOMContentLoaded', function() {
     connectWebSocket();
 });

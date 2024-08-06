@@ -8,27 +8,32 @@ import asyncio
 from redis_manager import RedisManager
 from prometheus_fastapi_instrumentator import Instrumentator
 
+# 로깅 설정
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Prometheus 메트릭 설정을 애플리케이션 생성 직후에 수행
+# Prometheus 메트릭 설정
 Instrumentator().instrument(app).expose(app)
 
+# 정적 파일 서비스 설정
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Redis 매니저 및 연결 관리 변수 초기화
 redis_manager = RedisManager()
 active_connections = {}
 message_history = {}
 banned_users = set()
 
+# 루트 경로 핸들러
 @app.get("/")
 async def get():
     with open("static/index.html", "r") as file:
         content = file.read()
     return HTMLResponse(content)
 
+# 메시지 브로드캐스트 함수
 async def broadcast_messages():
     await redis_manager.subscribe("chat")
     async for message in redis_manager.listen():
@@ -38,6 +43,7 @@ async def broadcast_messages():
         )
         logger.debug(f"Broadcasted message to all clients: {message}")
 
+# 스팸 체크 함수
 async def check_spam(client_id: str, message: str) -> bool:
     current_time = datetime.now()
     if client_id not in message_history:
@@ -63,6 +69,7 @@ async def check_spam(client_id: str, message: str) -> bool:
     
     return False
 
+# WebSocket 엔드포인트
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     client_ip = websocket.client.host
@@ -127,6 +134,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         redis_manager.decrement_connection_count(client_ip)
         logger.info(f"Connection closed for client: {client_id}")
 
+# 사용자 차단 해제 함수
+async def unban_user_after_delay(client_id: str, delay: int):
+    await asyncio.sleep(delay)
+    banned_users.remove(client_id)
+
+# 애플리케이션 시작 이벤트
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -138,6 +151,7 @@ async def startup_event():
         logger.error(f"Failed to start up properly: {e}", exc_info=True)
         raise
 
+# 애플리케이션 종료 이벤트
 @app.on_event("shutdown")
 async def shutdown_event():
     await redis_manager.close()
