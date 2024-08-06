@@ -4,7 +4,7 @@ metadata:
   name: fastapi-rollout
   namespace: chatting
 spec:
-  replicas: 7
+  replicas: 7  # 초기 레플리카 수
   selector:
     matchLabels:
       app: fastapi
@@ -46,3 +46,36 @@ spec:
       port: 80
       targetPort: 8000
   type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fastapi-hpa
+  namespace: chatting
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: fastapi-rollout
+  minReplicas: 3  # 최소 레플리카 수를 3로 설정
+  maxReplicas: 30
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 30
